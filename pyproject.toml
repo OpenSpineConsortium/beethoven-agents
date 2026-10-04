@@ -1,0 +1,84 @@
+# Package metadata and tool configuration. The environment itself is pixi's (pixi.toml / pixi.lock);
+# this file only tells the tools where the code is and how strict to be. The package is imported
+# from src/ via PYTHONPATH (set in pixi.toml's activation), so no build backend is needed yet.
+
+[project]
+name = "beethoven-agents"
+version = "0.0.0"
+description = "Beethoven nested agentic framework: substrate image, guard, accounts, orchestration"
+requires-python = ">=3.11"
+# Runtime dependencies are pinned by pixi.lock; this list is the declared intent for readers.
+dependencies = [
+  "icontract>=2.6",
+  "pydantic>=2",
+  "beartype>=0.18",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "vendor/beethoven-qa/src"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+# A bare `ruff check --fix .` or `ruff format .` must never rewrite the pinned copy.
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+# Correctness and clarity only; style churn is not a gate.
+select = ["E", "F", "W", "I", "B", "UP"]
+# Contract lambdas take positional names that must match the function's arguments, and are often
+# long; line length is already enforced at 100.
+ignore = ["E731"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src:vendor/beethoven-qa/src"
+packages = ["beethoven_agents"]
+strict = true
+# icontract and beartype ship their own types; crosshair is a dev tool, never imported by the package.
+warn_unused_ignores = true
+
+# What `python -m beethoven_qa gate` checks in this repository (beethoven-qa docs/CONSUMING.md).
+[tool.beethoven-qa]
+package = "beethoven_agents"
+src = "src"
+exempt = ["beethoven_agents"]
+per_condition_timeout = 20
+
+# Functions the gate never checks as targets, each with its reason (beethoven-qa
+# docs/CONSUMING.md section 3). Listing keeps a function from being a target and nothing more:
+# CrossHair still runs its body when it proves a contracted caller and assumes its contracts there,
+# which is why every contracted function that calls one of these is listed too (checked 2026-10-04
+# over the package's imports and calls). They keep their contracts, which
+# the tests check at run time; the gate prints this list on every run. Until the move from
+# beethoven-research (2026-10-04) each was a `# crosshair: off` comment in its body.
+# accounts.utc_text was one too, and CrossHair runs it, so it is proven now.
+[tool.beethoven-qa.unproven]
+"beethoven_agents.bee.accounts.beethoven_home" = "reads the environment and the home directory"
+"beethoven_agents.bee.accounts.registry_dir" = "reads the environment and the home directory"
+"beethoven_agents.bee.accounts.default_account_dir" = "reads the environment and the home directory"
+"beethoven_agents.bee.accounts.load_accounts" = "reads accounts.json"
+"beethoven_agents.bee.accounts.save_accounts" = "writes accounts.json"
+"beethoven_agents.bee.accounts.load_usage" = "reads the usage readings the status line recorded"
+"beethoven_agents.bee.accounts.log_switch" = "appends to switches.log"
+"beethoven_agents.bee.accounts.login_node_refusal" = "reads the environment and looks on PATH for a scheduler"
+"beethoven_agents.bee.accounts.find_claude" = "looks on PATH for claude"
+"beethoven_agents.bee.accounts.run_status" = "starts claude auth status"
+"beethoven_agents.bee.accounts.run_login" = "starts claude auth login at the person's own terminal"
+"beethoven_agents.bee.accounts.prepare_account_dir" = "makes the account's directory, and for main a link"
+"beethoven_agents.bee.accounts.now" = "reads the clock"
+"beethoven_agents.bee.claudeignore.ignored_by" = "logic CrossHair cannot run: each rule carries its regular expression as data, and CrossHair 0.0.111 stops with CrossHairInternal ('Numeric operation on symbolic while not tracing', measured 2026-10-04); tests/bee/test_claudeignore.py samples it"
+"beethoven_agents.bee.claudeignore.decide" = "reads the working directory and resolves links on disk"
+"beethoven_agents.bee.claudeignore.main" = "the hook: reads the event, prints the decision"
+"beethoven_agents.bee.handoff.state_dir" = "reads the environment and the working directory"
+"beethoven_agents.bee.handoff.git_snapshot" = "starts git"
+"beethoven_agents.bee.handoff.refresh_state" = "starts git and writes the state files"
+"beethoven_agents.bee.handoff.context_report" = "reads the hand-off file"
+"beethoven_agents.bee.handoff.install_context" = "writes the hand-off file and keeps the one it replaces"
+"beethoven_agents.bee.handoff.read_record" = "reads a state record"
+"beethoven_agents.bee.handoff.write_record" = "writes a state record"
+"beethoven_agents.bee.handoff.main" = "the hooks: read the event, write the state, print what Claude Code reads"
+"beethoven_agents.bee.cli.main" = "the command line: reads and writes the account list, starts Claude Code"

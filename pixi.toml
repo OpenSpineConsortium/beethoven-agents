@@ -1,0 +1,73 @@
+# Deterministic environment for beethoven-agents, the nested agentic framework of the Beethoven
+# engine: the image, the guard, accounts and the orchestration of `claude -p` steps and masters.
+# The lock beside this file (pixi.lock) is the record: exact versions, build strings and hashes,
+# solved for the grid's platform. A run is only reproducible if it is reconstructed from the lock
+# alone, so CI installs with --locked and never re-solves silently.
+#
+# Scope note: this is the SUBSTRATE env every engine job shares (the image reconstructs it). It
+# carries the verification stack beethoven-qa's gate needs, the same lines as beethoven-qa's
+# pixi.toml, and nothing else yet. The orchestrator (Metaflow, decision D3) is added as its own pixi
+# feature with its own Linear issue; the medical and telemetry stacks belong to the research
+# pipeline's study image, layered on this one (plan/REPO_SPLIT.md section 2).
+
+[workspace]
+name = "beethoven-agents"
+version = "0.0.0"
+description = "Beethoven nested agentic framework: substrate image, guard, accounts, orchestration"
+channels = ["conda-forge"]
+# linux-64 is what runs: the engine runs inside the Apptainer image on the cluster's x86_64 compute
+# nodes, and the lock must match the platform a run actually executes on. The three laptop platforms
+# were added for bee, the account switch, which runs on the student's own machine as well
+# (docs/bee/RUNBOOK.md); adding them left every linux-64 entry of the lock byte for byte as it was
+# (checked when they were added, 2026-10-04), so the image and CI reconstruct the same environment.
+platforms = ["linux-64", "win-64", "osx-arm64", "osx-64"]
+# Same-name derivation is off so the solve does not depend on an external conda<->PyPI mapping
+# host. The cost is an overlap the lock does record: CrossHair's PyPI requirements bring PyPI copies
+# of packaging, typing-extensions and mypy-extensions beside conda-forge's, at the same versions,
+# and `pixi install` warns that the PyPI files overwrite the conda ones. Harmless while the versions
+# match; revisit if a lock ever pins them apart.
+conda-pypi-map = false
+
+[dependencies]
+# Pinned low bounds only; the lock pins the exact build. conda-forge is the primary channel
+# (REFORMS prefers it); the two tools that are not packaged there come from PyPI below.
+python = "3.11.*"
+pip = "*"
+# --- Goal 1: contracts and layered runtime types ---
+icontract = ">=2.6"      # Design by Contract: @require / @ensure / invariants
+pydantic = ">=2"         # external-boundary validation (O(N) coercion)
+beartype = ">=0.18"      # internal hot-path checks (amortized O(1))
+typeguard = ">=4"        # test-enclave runtime checking
+# --- dev tooling the gate runs ---
+pytest = ">=8"
+ruff = ">=0.6"           # lint + format check
+mypy = ">=1.10"          # static types, the layer above the runtime checks
+
+[pypi-dependencies]
+# The symbolic-proof layer. CrossHair is published on PyPI only (not conda-forge); it pulls in
+# z3-solver itself, so z3 is not declared separately and there is no conda/PyPI overlap to reconcile.
+crosshair-tool = ">=0.0.60"
+
+[activation]
+# The package and the pinned copy of beethoven-qa (vendor/beethoven-qa, docs there: CONSUMING.md),
+# imported without a build step. Absolute, so a `pixi run` started outside the root finds them too.
+env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/vendor/beethoven-qa/src" }
+
+[tasks]
+# The verification gate, in the order a module must clear it. CI calls `pixi run gate`; a developer
+# runs the same thing locally, so "passes in CI" and "passes on my machine" cannot diverge.
+lint = "ruff check src tests && ruff format --check src tests"
+typecheck = "mypy src"
+test = "pytest -q"
+# beethoven-qa's gate on this package ([tool.beethoven-qa] in pyproject.toml): every public function
+# carries contracts, and CrossHair + Z3 find no input that satisfies a precondition while violating
+# a postcondition, within the declared bound per condition.
+symbolic = "python -m beethoven_qa gate"
+# The pinned copy still hashes to its ORIGIN and the kit files equal the copy's.
+vendor-check = "python -m beethoven_qa vendor-check"
+gate = { depends-on = ["lint", "typecheck", "test", "symbolic", "vendor-check"] }
+# The gate before every push, not only in CI: one command points git at the repository's hooks.
+hooks = "git config core.hooksPath .githooks"
+# bee, the account switch and the hand-off file (src/beethoven_agents/bee, docs/bee/): the same
+# command on a laptop and, through bee-grid.sh, in the image on a compute node.
+bee = "python -m beethoven_agents.bee"
