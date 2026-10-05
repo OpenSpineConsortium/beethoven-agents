@@ -68,14 +68,16 @@ inside the engine's image with that one directory bound at `/claude`, `docs/bee/
 `hpcworker claude login --account <label>` (the framework; not built, a contract item for
 `hpcworker`). Where neither the engine's image nor its checkout is at hand, the sitting can still be
 typed by hand inside an interactive allocation on a compute node (the launcher's own sitting makes
-one; at Wayne State the test partition is `secp` with `--qos=secondary`):
+one). The runtime's module (`runtime_module`), the node-local folder and the launcher's image
+(`image_store`) are the site profile's; these are Wayne State's (`bee-grid.sh site` prints the
+profile it reads; Wayne State's test partition is `secp` with `--qos=secondary`):
 
 ```sh
 label=second                                 # the student's word for this account
 dir="$HOME/.beethoven/accounts/$label/claude"
 mkdir -p "$dir" && chmod 700 "$dir"
 mkdir -p "/tmp/$USER/signin_$SLURM_JOB_ID"   # node-local temp for the sitting, removed below
-module load apptainer/1.2.2                  # Wayne State; other sites differ
+module load apptainer/1.2.2                  # the profile's runtime_module
 apptainer exec --containall --cleanenv --no-home \
     --bind "$dir":/claude \
     --bind "/tmp/$USER/signin_$SLURM_JOB_ID":/tmp \

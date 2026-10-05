@@ -13,15 +13,21 @@
 #                                           the hand-off file, as `bee handoff` (FILE inside DIR)
 #   bee-grid.sh run [<label>] [options] [-- claude args]
 #   bee-grid.sh continue [<label>] [--fork] [options] [-- claude args]
+#   bee-grid.sh site                        the site profile read, and what was taken from it
 #
 #   options: --project DIR (default: the current folder), --run-dir DIR (the state folder goes
 #            there instead of DIR/.claude/state), --strategy order|best|consume-first
 #
+# The container runtime and its module, the image and the node-local temp come from the site
+# profile of the deployment, never from this script (src/beethoven_agents/site.sh): BEE_SITE=<id>
+# picks one this copy carries under profiles/, otherwise the account's own ~/.hpcworker/profile.json
+# is read. BEE_IMAGE and BEE_APPTAINER_MODULE override the image and the module.
 # Each container sees one sign-in directory at most, bound at /claude: the one account it runs or
 # asks about. `continue --fork` also binds the last session's transcript, read-only, at
 # /handoff/<id>.jsonl (docs/ACCOUNTS.md section 5; what Claude Code does with it is probe M13).
 # The project is bound at /work/<name>-<hash>, a path of its own. Each call's node-local temp,
-# /tmp/$USER/bee_<job>_<random>, is removed on exit, the one thing this script deletes.
+# bee_<job>_<random> in the site's node-local folder, is removed on exit, the one thing this script
+# deletes.
 # Beethoven runs Claude Code and is not an Anthropic product.
 set -euo pipefail
 
@@ -46,21 +52,37 @@ esac
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 engine="$(cd "$here/../../.." && pwd)"
-image="${BEE_IMAGE:-/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif}"
 bhome="${BEETHOVEN_HOME:-$HOME/.beethoven}"
 registry="$bhome/engine"
 
-if ! command -v apptainer >/dev/null 2>&1 && type module >/dev/null 2>&1; then
-  module load "${BEE_APPTAINER_MODULE:-apptainer/1.2.2}" >/dev/null 2>&1 || true
+# shellcheck source=../site.sh
+. "$here/../site.sh"
+bee_site_resolve "$engine" || die "$BEE_SITE_WHY"
+rt="$BEE_SITE_RT"
+image="${BEE_IMAGE:-$BEE_SITE_IMAGE}"
+module="${BEE_APPTAINER_MODULE:-$BEE_SITE_MODULE}"
+tmpbase="$BEE_SITE_TEMP"
+if [ "${1:-}" = site ]; then
+  printf '%s\t%s\n' profile "$BEE_SITE_PATH" site "$BEE_SITE_ID" runtime "$rt" module "$module" \
+    image "$image" node_temp "$tmpbase"
 fi
-command -v apptainer >/dev/null 2>&1 || die "apptainer is not on the path (module load apptainer)"
+[ -n "$rt" ] || die "the site profile ($BEE_SITE_PATH) runs containers with $BEE_SITE_RUNTIME; bee needs apptainer or singularity"
+[ -n "$image" ] || die "the site profile ($BEE_SITE_PATH) names no image folder (containers_dir or image_store); set BEE_IMAGE"
+[ -n "$tmpbase" ] || die "the site profile's node temp ($BEE_SITE_NODE_TMP) is not a folder on this node"
+[ "${1:-}" != site ] || exit 0
+
+if ! command -v "$rt" >/dev/null 2>&1 && [ -n "$module" ] && type module >/dev/null 2>&1; then
+  module load "$module" >/dev/null 2>&1 || true
+fi
+command -v "$rt" >/dev/null 2>&1 || die "$rt is not on the path (module load ${module:-$rt})"
 [ -f "$image" ] || die "no image at $image: build it first (containers/README.md) or set BEE_IMAGE"
 
-# Container temp on the node's own disk, never $TMPDIR (CephFS at Wayne State), one folder per call:
-# another call in the same job (a second pane, a list) must not take a live session's /tmp with it.
-mkdir -p "/tmp/$USER" "$registry/usage"
+# Container temp on the node's own disk, never $TMPDIR unless the site profile says it is
+# node-local, one folder per call: another call in the same job (a second pane, a list) must not
+# take a live session's /tmp with it.
+mkdir -p "$tmpbase" "$registry/usage"
 chmod 700 "$registry"
-scratch="$(mktemp -d "/tmp/$USER/bee_${SLURM_JOB_ID}_XXXXXX")"
+scratch="$(mktemp -d "$tmpbase/bee_${SLURM_JOB_ID}_XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
 common=(exec --containall --cleanenv --no-home --bind "$scratch:/tmp")
@@ -73,13 +95,13 @@ pycmd=(env PYTHONPATH=/engine/src python -m beethoven_agents.bee)
 sessargs=("${common[@]}" --bind "$registry/usage:/beethoven/engine/usage"
   --env BEE_REGISTRY_DIR=/beethoven/engine --env "BEE_CONTINUE_HINT=bee-grid continue")
 
-bee_list() { apptainer "${pyargs[@]}" "$image" "${pycmd[@]}" "$@"; }
+bee_list() { "$rt" "${pyargs[@]}" "$image" "${pycmd[@]}" "$@"; }
 
 # label path -- command...: bee in the image with that one account's directory bound at /claude.
 bee_with() {
   local label="$1" path="$2"
   shift 2
-  apptainer "${pyargs[@]}" --bind "$path:/claude" --env CLAUDE_CONFIG_DIR=/claude \
+  "$rt" "${pyargs[@]}" --bind "$path:/claude" --env CLAUDE_CONFIG_DIR=/claude \
     --env "BEE_ACCOUNT=$label" "$image" "${pycmd[@]}" "$@"
 }
 
@@ -206,7 +228,7 @@ cmd_session() {
     plan+=(--project "$work" --strategy "$strategy")
     [ -n "$fork" ] && plan+=(--fork)
     # Step one: choose the account and the mode, with no sign-in directory bound.
-    line="$(apptainer "${pyargs[@]}" "${binds[@]}" ${envs[@]+"${envs[@]}"} "$image" \
+    line="$("$rt" "${pyargs[@]}" "${binds[@]}" ${envs[@]+"${envs[@]}"} "$image" \
       "${pycmd[@]}" "${plan[@]}")" || exit 1
     line="${line##*$'\n'}" # the plan is one line; bee's notes went to the terminal
     split_tabs "$line" t_label t_path t_mode t_transcript t_prompt t_owner
@@ -240,7 +262,7 @@ cmd_session() {
     echo "Starting Claude Code as $t_label ($t_mode) in $project" >&2
     started="$(date +%s)"
     set +e
-    apptainer "${sessargs[@]}" "${binds[@]}" ${envs[@]+"${envs[@]}"} ${more[@]+"${more[@]}"} \
+    "$rt" "${sessargs[@]}" "${binds[@]}" ${envs[@]+"${envs[@]}"} ${more[@]+"${more[@]}"} \
       "${sess[@]}" --bind "$t_path:/claude" --env CLAUDE_CONFIG_DIR=/claude \
       --env "BEE_ACCOUNT=$t_label" "$image" "${cmd[@]}"
     rc=$?
@@ -287,7 +309,7 @@ cmd_handoff() {
       *) die "put the file inside the project folder first ($project)" ;;
     esac
   fi
-  apptainer "${pyargs[@]}" --bind "$project:$work" --pwd "$work" "$image" "${pycmd[@]}" \
+  "$rt" "${pyargs[@]}" --bind "$project:$work" --pwd "$work" "$image" "${pycmd[@]}" \
     handoff ${args[@]+"${args[@]}"} --project "$work"
 }
 
@@ -301,5 +323,5 @@ case "$sub" in
   account) cmd_account "$@" ;;
   handoff) cmd_handoff "$@" ;;
   run | continue) cmd_session "$sub" "$@" ;;
-  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

@@ -368,8 +368,16 @@ says what is locked there and what a job sets per step.
   (REPO_SPLIT.md section 2).
 - `containers/` — the Apptainer recipe (Node + Claude Code CLI + this pixi env + the managed
   settings, the guard and the pinned beethoven-qa), the build script and the recorded digest.
-- `src/beethoven_agents/` — the package: `guard.py` (the PreToolUse guard the image runs before
-  every shell and file call) and `bee/` (the account list, the switch and the hand-off file, its
+- `profiles/` — hpcworker's composed site profiles, vendored as data (`ORIGIN` names the commit and
+  each file's sha256; `pull.sh` refreshes them; never edited here). One profile is one deployment:
+  a university's cluster and the lab on it (`/mnt/project-files/sites/DESIGN.md`, Linear BEE-219).
+  Nothing of one university is written into the engine's code: the runtime and its module, the
+  image folder and the node-local disk come from the profile, and `tests/test_site.py` fails on a
+  line of `src/` or `containers/` that spells a vendored site's host, path, partition or QoS.
+- `src/beethoven_agents/` — the package: `site.py` (the profile read as data, the reference, gated)
+  and `site.sh` (its bash twin, which bee-grid.sh and containers/build.sh source before any container
+  exists; the tests compare the two on every vendored profile), `guard.py` (the PreToolUse guard the
+  image runs before every shell and file call) and `bee/` (the account list, the switch and the hand-off file, its
   hooks, the grid wrapper and the shell helpers; `docs/bee/`). The lease, the registry, the bus and
   the reaper land here.
 - `vendor/beethoven-qa/` — the pinned copy of beethoven-qa (`ORIGIN`, the package, the plugin, the

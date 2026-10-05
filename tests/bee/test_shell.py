@@ -146,6 +146,7 @@ class Grid:
             "USER": self.user,
             "BEETHOVEN_HOME": str(self.bhome),
             "BEE_IMAGE": str(self.image),
+            "BEE_SITE": "wayne",
             "SLURM_JOB_ID": self.job,
             "SLURMD_NODENAME": "n1",
             "FAKE_APPTAINER_LOG": str(self.log),
@@ -413,3 +414,124 @@ def test_grid_handoff_import_maps_the_file_into_the_project(grid: Grid, project:
     outside.write_text("x\n")
     out = grid.run("handoff", "import", str(outside), "--project", str(project))
     assert out.returncode == 1 and "inside the project" in out.stderr
+
+
+# --- bee-grid.sh and the site profile ------------------------------------------------------------
+
+
+def site_profile(grid: Grid, **changes: object) -> Path:
+    """Wayne State's vendored profile with some fields changed, as a file of its own."""
+    prof = json.loads((REPO / "profiles" / "wayne.json").read_text())
+    prof.update(changes)
+    path = grid.tmp / "site.json"
+    path.write_text(json.dumps(prof))
+    return path
+
+
+def rows(out: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return dict(line.split("\t", 1) for line in out.stdout.splitlines())
+
+
+def test_grid_site_shows_what_it_took_from_wayne_states_profile(grid: Grid) -> None:
+    out = grid.run("site", BEE_IMAGE="")
+    assert out.returncode == 0, out.stderr
+    assert rows(out) == {
+        "profile": str(REPO / "profiles" / "wayne.json"),
+        "site": "wayne",
+        "runtime": "apptainer",
+        "module": "apptainer/1.2.2",
+        "image": "/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif",
+        "node_temp": f"/tmp/{grid.user}",
+    }
+    assert grid.calls() == []  # it reads the profile and starts nothing
+
+
+def test_grid_refuses_without_a_site_profile(grid: Grid) -> None:
+    out = grid.run("list", BEE_SITE="")
+    assert out.returncode == 1
+    assert "no site profile" in out.stderr and "BEE_SITE=<id> (this copy has: wayne)" in out.stderr
+    out = grid.run("list", BEE_SITE="nowhere")
+    assert out.returncode == 1 and "no profile for the site nowhere" in out.stderr
+    assert grid.calls() == []
+
+
+def test_grid_reads_the_accounts_own_profile(grid: Grid, home: Path) -> None:
+    lab = grid.tmp / "lab"
+    lab.mkdir()
+    (lab / "claude-verify.sif").write_text("not an image\n")
+    (home / ".hpcworker").mkdir()
+    (home / ".hpcworker" / "profile.json").write_text(site_profile(grid, containers_dir=str(lab))
+                                                      .read_text())  # fmt: skip
+    image = str(lab / "claude-verify.sif")
+    out = grid.run("site", BEE_SITE="", BEE_IMAGE="")
+    assert rows(out)["profile"] == str(home / ".hpcworker" / "profile.json")
+    assert rows(out)["image"] == image
+    out = grid.run("list", BEE_SITE="", BEE_IMAGE="", FAKE_IMAGE=image)
+    assert out.returncode == 0, out.stderr
+    assert image in grid.calls()[0]
+    # A profile named outright comes first.
+    other = site_profile(grid, containers_dir="/elsewhere")
+    out = grid.run("site", BEE_SITE="", BEE_IMAGE="", BEE_SITE_PROFILE=str(other))
+    assert rows(out)["image"] == "/elsewhere/claude-verify.sif"
+
+
+def test_grid_runs_singularity_where_the_site_names_it(grid: Grid) -> None:
+    assert shutil.which("singularity") is None and shutil.which("apptainer") is None
+    bin_dir = grid.tmp / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "singularity").symlink_to(FAKES / "apptainer")
+    prof = site_profile(grid, runtime="singularity")
+    out = grid.run("list", BEE_SITE_PROFILE=str(prof), PATH=f"{bin_dir}:{os.environ['PATH']}")
+    assert out.returncode == 0, out.stderr
+    assert len(grid.calls()) == 1
+    # Without it on the path the refusal names the command the site uses.
+    out = grid.run("list", BEE_SITE_PROFILE=str(prof), PATH=os.environ["PATH"])
+    assert out.returncode == 1 and "singularity is not on the path" in out.stderr
+
+
+def test_grid_refuses_a_runtime_it_cannot_drive(grid: Grid) -> None:
+    out = grid.run("list", BEE_SITE_PROFILE=str(site_profile(grid, runtime="podman")))
+    assert out.returncode == 1 and "bee needs apptainer or singularity" in out.stderr
+    assert grid.calls() == []
+
+
+def test_grid_loads_the_sites_module_when_the_runtime_is_missing(grid: Grid) -> None:
+    # A stand-in for the module command, as an exported bash function: it records what it was asked
+    # and puts the runtime on the path, as module load does on a cluster.
+    log = grid.tmp / "module.log"
+    fn = f'() {{ echo "$*" >> {log}; PATH="{FAKES}:$PATH"; }}'
+    cases: list[tuple[dict[str, str], str]] = [
+        ({}, "load apptainer/1.2.2"),
+        ({"BEE_APPTAINER_MODULE": "apptainer/9"}, "load apptainer/9"),
+    ]
+    for override, expected in cases:
+        log.unlink(missing_ok=True)
+        out = grid.run("list", PATH=os.environ["PATH"], **{"BASH_FUNC_module%%": fn}, **override)
+        assert out.returncode == 0, out.stderr
+        assert log.read_text().splitlines() == [expected]
+
+
+def test_grid_puts_its_temp_where_the_site_says(grid: Grid) -> None:
+    node = grid.tmp / "node"
+    prof = site_profile(grid, node_tmp="$SLURM_TMPDIR")
+    out = grid.run("list", BEE_SITE_PROFILE=str(prof), SLURM_TMPDIR=str(node))
+    assert out.returncode == 0, out.stderr
+    made = scratch(grid.calls()[0])
+    assert made.startswith(f"{node}/bee_{grid.job}_") and not Path(made).exists()
+    assert node.is_dir()  # the site's folder stays; only the call's own was removed
+
+
+def test_grid_refuses_a_node_temp_that_does_not_resolve(grid: Grid) -> None:
+    prof = site_profile(grid, node_tmp="$SLURM_TMPDIR/x")
+    out = grid.run("list", BEE_SITE_PROFILE=str(prof))
+    assert out.returncode == 1 and "node temp ($SLURM_TMPDIR/x)" in out.stderr
+    assert grid.calls() == []
+
+
+def test_grid_never_takes_tmpdir_the_site_did_not_declare_node_local(grid: Grid) -> None:
+    prof = site_profile(grid, node_tmp="", node_tmp_var="", tmpdir_is_node_local=False)
+    out = grid.run("site", BEE_SITE_PROFILE=str(prof), TMPDIR=str(grid.tmp / "ceph"))
+    assert rows(out)["node_temp"] == f"/tmp/{grid.user}"
+    prof = site_profile(grid, node_tmp="", node_tmp_var="", tmpdir_is_node_local=True)
+    out = grid.run("site", BEE_SITE_PROFILE=str(prof), TMPDIR=str(grid.tmp / "local"))
+    assert rows(out)["node_temp"] == str(grid.tmp / "local")
