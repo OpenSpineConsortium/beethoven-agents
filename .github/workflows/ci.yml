@@ -14,6 +14,10 @@ env:
   # install script, so the run makes one fetch it can account for.
   PIXI_VERSION: 0.81.0
 
+# No job writes anything; the token each job holds can only read.
+permissions:
+  contents: read
+
 jobs:
   gate:
     # Lane 1: the substrate reconstructs from the lock alone, the pinned copy of beethoven-qa is
@@ -23,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: install pixi
         run: |
           curl -fsSL -o /usr/local/bin/pixi \
@@ -61,7 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: install apptainer
         run: |
           sudo apt-get update -q
