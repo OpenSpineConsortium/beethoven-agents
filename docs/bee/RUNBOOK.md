@@ -108,17 +108,24 @@ keeps its own account list, and each account is signed in once on each machine.
 All of this runs on a compute node, never on the login node. One scheduler call from the login node
 gives the shell; everything after it happens inside the allocation.
 
+What differs from one university to the next (the image folder, the container runtime and its
+module, the node-local disk, the partitions) is the site profile's, never bee's: `BEE_SITE=<id>`
+names one of the engine's `profiles/`, otherwise `bee-grid.sh` reads the account's own
+`~/.hpcworker/profile.json`, which the launcher's install writes. `bee-grid.sh site` prints the
+profile it read and what it took from it. The commands below are Wayne State's.
+
 **G0. The image** (once for the lab; Linear BEE-103, not yet done). In a Slurm job on a compute
 node, from the engine checkout:
 
 ```sh
-module load apptainer/1.2.2
+export BEE_SITE=wayne
 bash containers/build.sh --out /rs/rs_grp_oschome/shared/beethoven/containers
 ```
 
-`bee-grid.sh` uses `/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif` unless
-`BEE_IMAGE` names another. The launcher's `claude-node22` image has no engine environment, so bee
-cannot run in it.
+`bee-grid.sh` uses `claude-verify.sif` in the lab's image folder (`bee-grid.sh site` prints it; at
+Wayne State `/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif`) unless `BEE_IMAGE`
+names another. The launcher's `claude-node22` image has no engine environment, so bee cannot run in
+it.
 
 **G1. A shell on a compute node** (Wayne State's test partition). It has to come from `srun`: an
 `salloc` shell stays on the login node, and `bee-grid.sh` refuses it. Whether the portal's
@@ -137,11 +144,12 @@ gh repo clone OpenSpineConsortium/beethoven-agents
 alias bee-grid="bash /rs/rs_grp_oschome/$USER/beethoven-agents/src/beethoven_agents/bee/bee-grid.sh"
 ```
 
-**G3. The first run** (this is also the first measurement of the script under the grid's bash 4.2
-and apptainer 1.2.2):
+**G3. The first run** (this is also the first measurement of the script under the grid's bash 4.2,
+python 3.6 and apptainer 1.2.2):
 
 ```sh
 bash -n /rs/rs_grp_oschome/$USER/beethoven-agents/src/beethoven_agents/bee/bee-grid.sh
+bee-grid site                      # the profile read, the runtime, its module, the image, the node temp
 bee-grid list                      # "No accounts yet." on a fresh list
 ```
 
@@ -180,11 +188,12 @@ ACCOUNTS.md section 9 lists what this probe settles. It uses Claude Code directl
 signed in (G4); a scratch project; inside an allocation (G1).
 
 ```sh
-img=/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif
+img=$(bee-grid site | awk -F'\t' '$1 == "image" { print $2 }')
 A=$HOME/.beethoven/accounts/a/claude
 B=$HOME/.beethoven/accounts/b/claude
 P=/rs/rs_grp_oschome/$USER/m13 && mkdir -p "$P" && git -C "$P" init -q
-s=/tmp/$USER/m13_$SLURM_JOB_ID && mkdir -p "$s" && chmod 700 "$s"
+s=$(bee-grid site | awk -F'\t' '$1 == "node_temp" { print $2 }')/m13_$SLURM_JOB_ID
+mkdir -p "$s" && chmod 700 "$s"
 trap 'rm -rf "$s"' EXIT                        # our node-local temp, the one thing removed
 box() { apptainer exec --containall --cleanenv --no-home --bind "$s:/tmp" --bind "$P:/work" --pwd /work "$@"; }
 

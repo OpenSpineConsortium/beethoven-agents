@@ -16,17 +16,22 @@ the image; whether a `-p` step or a master loads the plugin there is not yet mea
 
 ## Build
 
-On the cluster, inside a Slurm job on a compute node (never the login node):
+On the cluster, inside a Slurm job on a compute node (never the login node), into the lab's image
+folder. The folder, the runtime and its module, and the node-local disk are the site profile's
+(`src/beethoven_agents/site.sh`; `BEE_SITE=<id>` names one of `profiles/`, otherwise the account's
+own `~/.hpcworker/profile.json` is read), and `bee-grid.sh site` prints them. At Wayne State:
 
 ```sh
-module load apptainer/1.2.2           # Wayne State; other sites differ
+export BEE_SITE=wayne                 # its runtime_module, apptainer/1.2.2, is loaded when needed
 bash containers/build.sh --out /rs/rs_grp_oschome/shared/beethoven/containers
 ```
 
-`build.sh` uses `--fakeroot`, keeps temp and cache on the node's local disk under `/tmp/$USER` with
-a cleanup trap (never `$TMPDIR`, which on Wayne State is CephFS), and writes `claude-verify.digest`
-beside the image: the sha256 of the `.sif`, the apptainer, Claude Code and pixi versions read back
-from inside the image, the recipe's git SHA and the lock's sha256. **Commit the digest file** when an
+`build.sh` uses `--fakeroot`, keeps temp and cache on the node's local disk in a folder of its own
+with a cleanup trap (`$TMPDIR` only where the profile says it is node-local; at Wayne State it is
+CephFS), and writes `claude-verify.digest` beside the image: the sha256 of the `.sif`, the runtime's,
+Claude Code's and pixi's versions read back from inside the image, the recipe's git SHA and the
+lock's sha256. Without `--out` the image stays in this folder, and the script says where
+`bee-grid.sh` looks for it on that site. A CI runner (`--allow-outside-slurm`) needs no profile. **Commit the digest file** when an
 image is published; the `.sif` itself is never committed.
 
 The recipe's `%post` refuses to finish unless the managed settings parse and the guard, run exactly

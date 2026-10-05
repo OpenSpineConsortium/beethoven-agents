@@ -49,7 +49,9 @@ jobs:
         run: |
           for f in containers/build.sh .githooks/pre-push .claude/hooks/session-start.sh \
             src/beethoven_agents/bee/bee-grid.sh src/beethoven_agents/bee/hook.sh \
-            src/beethoven_agents/bee/shell/bee.sh; do bash -n "$f" || exit 1; done
+            src/beethoven_agents/bee/shell/bee.sh src/beethoven_agents/site.sh profiles/pull.sh; do
+            bash -n "$f" || exit 1
+          done
 
   image:
     # Lane 2: the recipe builds. This proves the .def and the lock agree and the fetches it names
@@ -109,7 +111,8 @@ jobs:
         # The hooks exactly as the managed settings name them, with the events Claude Code would
         # send: the ignore hook refuses the sign-in file, the session hook writes its record into
         # the bound project. Then bee-grid.sh itself, with the engine bound read-only, lists the
-        # (empty) account list through the image's python (docs/bee/RUNBOOK.md).
+        # (empty) account list through the image's python (docs/bee/RUNBOOK.md), with Wayne State's
+        # vendored profile for its site values and the image built here in place of the lab's.
         run: |
           proj="$RUNNER_TEMP/proj"; mkdir -p "$proj"
           img="$RUNNER_TEMP/claude-verify.sif"
@@ -123,7 +126,7 @@ jobs:
           sudo python3 -c "import json,sys; d=json.load(open(sys.argv[1])); \
             assert d['transcript_path']=='/claude/projects/-work/s1.jsonl' and d['account']=='ci', d; print('session record ok')" \
             "$proj/.claude/state/session.json"
-          sudo env SLURM_JOB_ID=ci SLURMD_NODENAME=ci USER=root HOME="$RUNNER_TEMP/home" BEE_IMAGE="$img" \
+          sudo env SLURM_JOB_ID=ci SLURMD_NODENAME=ci USER=root HOME="$RUNNER_TEMP/home" BEE_SITE=wayne BEE_IMAGE="$img" \
             bash src/beethoven_agents/bee/bee-grid.sh list | tee "$RUNNER_TEMP/bee-list.txt"
           grep -q "No accounts yet" "$RUNNER_TEMP/bee-list.txt"
           if ls -d /tmp/root/bee_ci_* >/dev/null 2>&1; then echo "node-local temp left behind"; exit 1; fi
