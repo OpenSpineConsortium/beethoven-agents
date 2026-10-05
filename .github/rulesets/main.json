@@ -37,6 +37,10 @@
           {
             "context": "image (apptainer build)",
             "integration_id": 15368
+          },
+          {
+            "context": "standards (every group green)",
+            "integration_id": 15368
           }
         ]
       }
