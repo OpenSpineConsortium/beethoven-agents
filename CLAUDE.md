@@ -136,6 +136,17 @@ CI runs the same. `guard.py` takes its decorators straight from `icontract`, bec
 it as one file before any package is bound; the gate recognises them either way. Step 5 lands in
 beethoven-qa.
 
+**The code standards** (beethoven-qa 2.0.0, its `docs/STANDARDS.md`; greg, 2026-10-04 23:26Z):
+beside the definition of done, which says whether code is correct, six groups hold this
+package's new code to limits that say whether a person can read it, change it and trust what
+built it: readability, design, duplication, coverage, security and supply chain.
+`pixi run --locked standards` runs them against where the branch left `main` (the gate runs it
+too); the kit's `standards.yml` runs one CI job per group, and `standards (every group green)` is
+a required check. Only what a change makes new or worse blocks; no setting, configuration file or
+suppression comment here loosens a limit, which changes only in a release of beethoven-qa. The
+`code-standards` skill (`vendor/beethoven-qa/plugin/skills/`) says how to write to them and how
+to answer a failure.
+
 ## Token economy — always on, every run (Goal 3 / Goal 5 orchestration half)
 
 Every name below was checked against code.claude.com/docs on 2026-10-04 (three names in the plan
@@ -313,13 +324,15 @@ position on autonomous agents and the paper's AI-use disclosure are the maintain
 
 ```sh
 pixi install --locked     # reconstruct the exact env from the lock; CI uses --locked too
-pixi run --locked gate    # lint + typecheck + tests + symbolic (beethoven-qa's gate) + vendor-check
+pixi run --locked gate    # lint + typecheck + tests + symbolic (beethoven-qa's gate) + standards + vendor-check
 pixi run --locked symbolic  # just the CrossHair/Z3 gate: python -m beethoven_qa gate
+pixi run --locked standards  # the code standards, every group, against where this branch left main
 pixi run --locked vendor-check  # the pinned copy still matches its ORIGIN, the kit files equal the copy's
 ```
 
-The pinned copy and the four kit files (`.githooks/pre-push`, `.github/workflows/automerge.yml`,
-`.github/workflows/rulesets.yml`, `.claude/hooks/session-start.sh`) are never edited here; a change
+The pinned copy and the five kit files (`.githooks/pre-push`, `.github/workflows/automerge.yml`,
+`.github/workflows/rulesets.yml`, `.claude/hooks/session-start.sh`,
+`.github/workflows/standards.yml`) are never edited here; a change
 is made in beethoven-qa, released, and taken with its `vendor` command (beethoven-qa
 `docs/CONSUMING.md`, "Updating to a new release").
 
@@ -335,10 +348,10 @@ pushed: every ref must be the checkout's HEAD and the tree must hold nothing unc
 files count), or it refuses and says so; from a linked worktree it drops the `GIT_DIR` git hands a
 hook before the gate runs. `SKIP_GATE=1` skips all of it knowingly, and
 the commit says why. On GitHub the same gate is the required check on `main`: the rule lives in
-`.github/rulesets/main.json` (deletion and force-push blocked; the `gate` and `image` lanes must be
-green, by their exact job names; organization admins bypass) and is imported into the repository's
-rulesets, so whether a pull request lands is decided by the tests, with no review step and no human
-click once auto-merge is armed on it. Pull requests are opened ready for review, never as drafts.
+`.github/rulesets/main.json` (deletion and force-push blocked; the `gate` and `image` lanes and
+`standards (every group green)` must be green, by their exact job names; organization admins
+bypass) and is imported into the repository's rulesets, so whether a pull request lands is decided
+by the tests, with no review step and no human click once auto-merge is armed on it. Pull requests are opened ready for review, never as drafts.
 
 The functions the gate never checks as targets are listed, each with its reason, under
 `[tool.beethoven-qa.unproven]` in `pyproject.toml` (bee's readers, writers, clock and process
@@ -361,8 +374,9 @@ says what is locked there and what a job sets per step.
 ## Layout
 
 - `pixi.toml` / `pixi.lock` — the substrate: the verification stack (Goal 1) and the dev tooling the
-  gate runs, the same lines as beethoven-qa's, pinned for `linux-64` (what runs) and the three laptop
-  platforms bee runs on. Orchestration (Metaflow) is
+  gate runs, the code standards' tools among it, the same lines as beethoven-qa's, pinned for
+  `linux-64` (what runs) and the three laptop platforms bee runs on (complexipy, which conda-forge
+  does not build for osx-arm64, comes from PyPI there). Orchestration (Metaflow) is
   added as its own pixi feature with its own issue; the medical (pydicom/MONAI) and telemetry
   (W&B/CodeCarbon) stacks belong to the research pipeline's study image, layered on this one
   (REPO_SPLIT.md section 2).
