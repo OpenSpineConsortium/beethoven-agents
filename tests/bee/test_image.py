@@ -69,3 +69,15 @@ def test_no_bee_hook_opens_the_transcript() -> None:
     for name in ("handoff.py", "claudeignore.py", "accounts.py", "cli.py"):
         text = (REPO / "src" / "beethoven_agents" / "bee" / name).read_text()
         assert not re.search(r"open\([^)]*transcript", text), name
+
+
+def test_image_unsets_every_variable_bee_strips() -> None:
+    # The recipe's %environment is the image's own line against a key, token, endpoint or provider
+    # a caller left set; it names the same variables bee strips from every child it starts.
+    from beethoven_agents.bee.accounts import CREDENTIAL_VARS
+
+    environment = RECIPE.read_text().split("%environment\n", 1)[1].split("\n%", 1)[0]
+    joined = environment.replace("\\\n", " ")
+    unset = [line.split()[1:] for line in joined.splitlines() if line.split()[:1] == ["unset"]]
+    assert len(unset) == 1
+    assert sorted(unset[0]) == sorted(CREDENTIAL_VARS)

@@ -135,6 +135,26 @@ def test_child_environment_loses_every_credential() -> None:
     assert acc.clean_child_env(parent) == {"PATH": "/bin", "HOME": "/h"}
 
 
+# hpcworker's strip list, the canonical one (CLEAN_ENV in framework/jobs/worker.sbatch.tpl and
+# clean_env_args in framework/bin/hpcworker on its main at 818f4a2, read 2026-10-07). Typed here
+# until hpcworker's contract export is merged; the re-pin of Wave B takes it from the pinned copy
+# of that export's rules.json (credential_variables) instead.
+HPCWORKER_STRIPS = (
+    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR", "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+    "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_OAUTH_SCOPES",
+)  # fmt: skip
+
+
+def test_bee_strips_everything_the_launcher_strips() -> None:
+    assert len(HPCWORKER_STRIPS) == 15
+    assert set(HPCWORKER_STRIPS) <= set(acc.CREDENTIAL_VARS)
+    assert len(set(acc.CREDENTIAL_VARS)) == len(acc.CREDENTIAL_VARS)
+
+
 # What `claude auth status --json` answered in a cloud session for a directory nobody signed in to
 # (2026-10-04, Claude Code 2.1.289): a token from the host outranked the directory.
 MEASURED_HOST_TOKEN = {
@@ -158,6 +178,54 @@ def test_status_counts_only_the_directorys_own_subscription() -> None:
     assert not acc.interpret_status({"loggedIn": False}, "/d").ok
     old = {"loggedIn": True, "authMethod": "claude.ai"}
     assert acc.interpret_status(old, "/d").ok  # before configDirectory existed
+
+
+# What hpcworker's verdict (hpcw_claude_signin in framework/lib/adapters/common.sh on its main,
+# 818f4a2) answers for each payload: loggedIn first, then any apiKeySource whatever its value, then
+# authMethod claude.ai with apiProvider firstParty or absent. bee's verdict is stricter only about
+# the directory (configDirectory), which these payloads do not name. Typed here until hpcworker's
+# contract export is merged; Wave B runs the pinned rules.json's signin_cases instead.
+SIGNIN_CASES: list[tuple[dict[str, object], str]] = [
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty",
+      "email": "a@b.edu", "subscriptionType": "max"}, "subscription"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "email": "a@b.edu"}, "subscription"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": None}, "subscription"),
+    # the Console's own key, which Claude Code 2.1.42 reports beside authMethod claude.ai
+    ({"loggedIn": True, "authMethod": "api_key", "apiProvider": "firstParty",
+      "apiKeySource": "/login managed key", "email": "a@b.edu"}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty",
+      "apiKeySource": "/login managed key", "email": "a@b.edu", "subscriptionType": None}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty",
+      "apiKeySource": "ANTHROPIC_API_KEY", "subscriptionType": "max"}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiKeySource": None}, "other"),
+    ({"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty"}, "other"),
+    ({"loggedIn": True, "authMethod": "third_party", "apiProvider": "bedrock"}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "gateway",
+      "email": "a@b.edu"}, "other"),
+    ({"loggedIn": True}, "other"),
+    ({"loggedIn": False, "authMethod": "none", "apiProvider": "firstParty"}, "none"),
+    ({"loggedIn": False, "authMethod": "claude.ai", "apiKeySource": "x"}, "none"),
+    ({"loggedIn": "true", "authMethod": "claude.ai"}, "none"),
+    ({}, "none"),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("payload", "verdict"), SIGNIN_CASES)
+def test_status_agrees_with_the_launchers_verdict(payload: dict[str, object], verdict: str) -> None:
+    got = acc.interpret_status(payload, None)
+    assert got.ok == (verdict == "subscription"), got
+    assert (got.reason == "not signed in") == (verdict == "none"), got
+    if "apiKeySource" in payload and verdict == "other":
+        assert "API key" in got.reason and str(payload["apiKeySource"]) not in got.reason
+
+
+def test_status_that_is_not_json_is_no_sign_in(tmp_path: Path) -> None:
+    # hpcworker's last case: claude auth status printed nothing at all.
+    silent = tmp_path / "claude"
+    silent.write_text("#!/bin/sh\nexit 0\n")
+    silent.chmod(0o755)
+    verdict, shown = acc.run_status(acc.Account("a", str(tmp_path / "a")), str(silent), {})
+    assert not verdict.ok and shown is None
 
 
 def test_transcript_seen_from_the_host() -> None:

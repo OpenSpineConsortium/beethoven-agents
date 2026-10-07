@@ -46,6 +46,7 @@ from icontract import ensure, require
 from pydantic import BaseModel, ConfigDict, model_validator
 
 __all__ = [
+    "CREDENTIAL_VARS",
     "TRIGGER_TOKENS",
     "Verdict",
     "check_command",
@@ -54,6 +55,29 @@ __all__ = [
     "main",
     "normalize_command",
 ]
+
+# Every variable that would put a step on something other than the student's own subscription: a
+# key or token that outranks the sign-in, an endpoint, a cloud provider's switch. A command that
+# names one is refused, whether it sets, prints or unsets it. The same names as bee's
+# CREDENTIAL_VARS (bee/accounts.py; tests/test_guard.py keeps the two equal), typed again because
+# the image runs this file alone, before the package is bound.
+CREDENTIAL_VARS: tuple[str, ...] = (
+    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE",
+    "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_WORKSPACE_ID",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AWS_API_KEY", "ANTHROPIC_AWS_BASE_URL", "ANTHROPIC_AWS_WORKSPACE_ID",
+    "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+    "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_BEDROCK_SERVICE_TIER",
+    "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID",
+    "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL",
+    "ANTHROPIC_FOUNDRY_RESOURCE",
+    "AWS_BEARER_TOKEN_BEDROCK", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY",
+    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES",
+    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+)  # fmt: skip
 
 # Every refusal in check_command rests on one of these, as a whole word in the normalized command
 # (a token with no word characters, like the fork bomb's, is matched as plain text). The gate
@@ -67,7 +91,7 @@ TRIGGER_TOKENS: tuple[str, ...] = (
     "ssh", "scp", "sftp", "nc", "ncat", "telnet", "socat", "rsync", "curl", "wget",
     "sacctmgr", "scontrol", "scancel", "sbatch", "array",
     "setup", "logout", "login", "purge",
-    "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN",
+    *CREDENTIAL_VARS,
     "credentials", "CLAUDE_CONFIG_DIR",
 )  # fmt: skip
 
@@ -172,6 +196,7 @@ def _refusal_is_grounded(command: str, config_dir: str) -> bool:
 # The rule table, in the order the Playbook (greg, 2026-10-03) lists them, plus the engine's own
 # credential rules. Each pattern is matched against the normalized command.
 _RM_FLAGS = r"-[a-zA-Z]*[rRf][a-zA-Z]*|--recursive|--force"
+_CREDENTIAL_NAMES = "|".join(re.escape(name) for name in CREDENTIAL_VARS)
 _COMMAND_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "recursive or forced deletion",
@@ -235,13 +260,14 @@ _COMMAND_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
             r"\bsetup-token\b"
             r"|\bclaude +auth +(?:logout|login)\b"
             r"|\bclaude +project +purge\b"
-            r"|\b(?:CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN)\b"
+            rf"|\b(?:{_CREDENTIAL_NAMES})\b"
             r"|\.credentials\.json"
             r"|\bCLAUDE_CONFIG_DIR\b"
         ),
-        "Beethoven never reads, prints, copies or relays a Claude credential, never signs the "
-        "student in or out and never purges what Claude Code keeps there; claude auth status is "
-        "the only question asked of the sign-in",
+        "Beethoven never reads, prints, copies or relays a Claude credential, never names a key, "
+        "token, endpoint or provider variable, never signs the student in or out and never "
+        "purges what Claude Code keeps there; claude auth status is the only question asked of "
+        "the sign-in",
     ),
     (
         "secret in sbatch --export",

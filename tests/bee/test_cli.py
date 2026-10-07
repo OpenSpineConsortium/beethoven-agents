@@ -275,6 +275,27 @@ def test_nothing_starts_inside_a_claude_code_session(
     assert bee("account", "login", "c") == 1
 
 
+# hpcworker's agent markers (hpcw_agent_env, framework/lib/adapters/common.sh on its main at
+# 818f4a2, read 2026-10-07). Typed here until hpcworker's contract export is merged; Wave B takes
+# them from the pinned copy of that export's rules.json (agent_markers) instead.
+HPCWORKER_MARKERS = (
+    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "BEETHOVEN_REQUEST_ID", "BEETHOVEN_WORKER",
+    "ASHLEY_REQUEST_ID", "ASHLEY_WORKER", "ASHLEY_JOB", "HPCW_AGENT", "AI_AGENT",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("marker", HPCWORKER_MARKERS)
+def test_every_agent_marker_refuses(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], marker: str
+) -> None:
+    assert set(HPCWORKER_MARKERS) <= set(cli.AGENT_MARKERS)
+    three(home)
+    capsys.readouterr()
+    monkeypatch.setenv(marker, "1")
+    assert bee("account", "login", "c") == 1
+    assert f"({marker} is set)" in capsys.readouterr().err
+
+
 def test_pin_and_unpin(home: Path, project: Path) -> None:
     three(home)
     (project / ".envrc").write_text("export OTHER=1\n")

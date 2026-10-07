@@ -12,11 +12,12 @@ Three changes from the guide (docs/bee/STATE_HANDOFF.md says why, with the evide
   ``~/.claude``. With the variable unset Claude Code keeps ``.claude.json`` at ``~/.claude.json``;
   with it set, inside the directory (measured on 2.1.289), so the alias would strand the default
   account's own settings and history index.
-- A status counts as signed in only when it is the directory's own claude.ai sign-in. A token in
-  the environment, an API key or a cloud provider outranks the directory in Claude Code's
-  authentication order and answers ``loggedIn: true`` for a directory nobody signed in to
-  (measured in a cloud session, where ``authMethod`` was ``oauth_token``); an API key would also
-  bill usage, which the engine never does (D1, C7).
+- A status counts as signed in only when it is the directory's own claude.ai sign-in with no key
+  behind it (``apiKeySource`` absent, hpcworker's verdict). A token in the environment, an API key
+  or a cloud provider outranks the directory in Claude Code's authentication order and answers
+  ``loggedIn: true`` for a directory nobody signed in to (measured in a cloud session, where
+  ``authMethod`` was ``oauth_token``); an API key would also bill usage, which the engine never
+  does (D1, C7).
 - Every child process gets an environment stripped of every credential and provider variable, for
   the same reason.
 
@@ -83,7 +84,8 @@ FALLBACK_REST_S = 5 * 3600
 # Every variable that outranks a sign-in directory in Claude Code's authentication order, or routes
 # the session to a provider that bills (code.claude.com/docs, authentication and env-vars pages,
 # read 2026-10-04). A child process never inherits one: the directory decides, and only a
-# subscription is ever used.
+# subscription is ever used. hpcworker's strip list is canonical for the launcher (its job's
+# CLEAN_ENV); every name of it is here (tests/bee/test_accounts.py); the rest are this file's own.
 CREDENTIAL_VARS: tuple[str, ...] = (
     "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE",
     "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_WORKSPACE_ID",
@@ -95,8 +97,10 @@ CREDENTIAL_VARS: tuple[str, ...] = (
     "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL",
     "ANTHROPIC_FOUNDRY_RESOURCE",
     "AWS_BEARER_TOKEN_BEDROCK", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
-    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY",
     "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES",
     "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
 )  # fmt: skip
 # Set fresh for the child from the chosen account, never inherited from the parent's shell.
@@ -477,15 +481,23 @@ _METHOD_REASONS = {
     "third_party": "a cloud provider answered, not a Claude plan",
     "none": "not signed in",
 }
+_KEY_REASON = (
+    "an API key is behind this sign-in, which bills per use; Beethoven uses only a Claude plan"
+)
 
 
 @beartype
 @ensure(
     lambda result, payload: (
         not result.ok
-        or (payload.get("loggedIn") is True and payload.get("authMethod") == "claude.ai")
+        or (
+            payload.get("loggedIn") is True
+            and payload.get("authMethod") == "claude.ai"
+            and payload.get("apiProvider") in (None, "firstParty")
+            and "apiKeySource" not in payload
+        )
     ),
-    "only the directory's own claude.ai sign-in counts",
+    "only the directory's own claude.ai subscription counts, first party, with no key behind it",
 )
 @ensure(
     lambda result, payload, expected_dir: (
@@ -501,6 +513,11 @@ def interpret_status(payload: dict[str, object], expected_dir: str | None) -> Au
     the caller, or None to skip the comparison)."""
     if payload.get("loggedIn") is not True:
         return AuthVerdict(ok=False, reason="not signed in")
+    if "apiKeySource" in payload:
+        # Claude Code names a key's source only when a key is behind the sign-in, and reports the
+        # Console's own ("/login managed key") beside authMethod claude.ai, so its presence decides,
+        # as in hpcworker's verdict; its value, a label, is neither read nor shown.
+        return AuthVerdict(ok=False, reason=_KEY_REASON)
     method = payload.get("authMethod")
     if method != "claude.ai":
         reason = _METHOD_REASONS.get(str(method), f"signed in by an unrecognised method ({method})")

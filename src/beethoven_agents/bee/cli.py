@@ -147,10 +147,19 @@ def _ensure_not_login_node() -> None:
         raise Refusal(why)
 
 
+# What says an agent, not a person, is asking: hpcworker's list (hpcw_agent_env in its
+# framework/lib/adapters/common.sh), with Claude Code's own markers and the VS Code edition's worker
+# among them. bee-grid.sh checks the same names on the host, where --cleanenv cannot hide them.
+AGENT_MARKERS: tuple[str, ...] = (
+    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "BEETHOVEN_REQUEST_ID", "BEETHOVEN_WORKER",
+    "ASHLEY_REQUEST_ID", "ASHLEY_WORKER", "ASHLEY_JOB", "HPCW_AGENT", "AI_AGENT",
+)  # fmt: skip
+
+
 def _ensure_not_nested() -> None:
     """bee starts Claude Code and signs accounts in; a Claude Code session never does either from
     its own shell (an agent marker in the environment means one is asking)."""
-    for marker in ("CLAUDECODE", "BEETHOVEN_REQUEST_ID", "ASHLEY_REQUEST_ID"):
+    for marker in AGENT_MARKERS:
         if os.environ.get(marker):
             raise Refusal(
                 f"this is a Claude Code session ({marker} is set); run bee from your own terminal"
