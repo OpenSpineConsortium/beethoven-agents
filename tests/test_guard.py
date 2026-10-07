@@ -18,7 +18,9 @@ from pathlib import Path
 import pytest
 from beethoven_qa.contracts import ViolationError
 
+from beethoven_agents.bee import accounts
 from beethoven_agents.guard import (
+    CREDENTIAL_VARS,
     TRIGGER_TOKENS,
     Verdict,
     check_command,
@@ -183,6 +185,7 @@ ALLOWED = [
     "mount | grep nfs" if False else "df -h",
     "nproc",
     "module load apptainer",
+    "echo $ANTHROPIC_MODEL",
 ]
 
 
@@ -191,6 +194,23 @@ def test_allowed(command: str) -> None:
     verdict = judge(command)
     assert verdict.decision == "allow", verdict
     assert verdict.rule == "" and verdict.reason == ""
+
+
+@pytest.mark.parametrize("name", CREDENTIAL_VARS)
+def test_every_credential_variable_is_refused(name: str) -> None:
+    # Set for one command, exported, printed or unset: a step names none of them.
+    for command in (f"{name}=x claude -p hi", f"export {name}=x", f"echo ${name}", f"unset {name}"):
+        assert judge(command).rule == "credential or sign-in directory", command
+
+
+def test_guard_refuses_what_bee_strips() -> None:
+    # The image runs guard.py alone, so it types the list again; the two never drift apart, and
+    # both hold hpcworker's (the pinned contract's rules.json, credential_variables).
+    assert CREDENTIAL_VARS == accounts.CREDENTIAL_VARS
+    pinned = Path(__file__).resolve().parent.parent / "contract" / "rules.json"
+    rules = json.loads(pinned.read_text(encoding="utf-8"))
+    assert rules["credential_variables"]
+    assert set(rules["credential_variables"]) <= set(CREDENTIAL_VARS)
 
 
 def test_asks_for_the_two_borderline_cases() -> None:

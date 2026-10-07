@@ -44,7 +44,8 @@ die() {
 # its markers from the check inside the image, so it is made here).
 case "${1:-}" in
   add | login | run | continue)
-    for _m in CLAUDECODE BEETHOVEN_REQUEST_ID ASHLEY_REQUEST_ID; do
+    for _m in CLAUDECODE CLAUDE_CODE_ENTRYPOINT BEETHOVEN_REQUEST_ID BEETHOVEN_WORKER \
+      ASHLEY_REQUEST_ID ASHLEY_WORKER ASHLEY_JOB HPCW_AGENT AI_AGENT; do
       [ -z "${!_m:-}" ] || die "this is a Claude Code session ($_m is set); run it from your own shell"
     done
     ;;

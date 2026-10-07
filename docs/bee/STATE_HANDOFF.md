@@ -47,7 +47,9 @@ subscription in this very directory" is disabled in the list and reported, never
 
 *Measured* while building it: in a session whose environment carried a sign-in token from outside,
 `claude auth status` for an empty directory answered `loggedIn: true` with `authMethod:
-"oauth_token"`. `bee` counts an account as signed in only for `authMethod: "claude.ai"` with the
+"oauth_token"`. `bee` counts an account as signed in only for `authMethod: "claude.ai"`, with
+`apiProvider` `firstParty` or absent and no `apiKeySource` (a key behind the sign-in, as hpcworker's
+verdict has it since Claude Code reports the Console's own key beside `claude.ai`), with the
 directory's own `configDirectory`, and strips every credential variable (`ANTHROPIC_API_KEY`,
 `CLAUDE_CODE_OAUTH_TOKEN` and the rest, `accounts.py` `CREDENTIAL_VARS`) from the environment of
 every Claude Code it starts, so a token from elsewhere can never stand in for an account.

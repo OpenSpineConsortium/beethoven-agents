@@ -1,6 +1,7 @@
-"""The site profile: the vendored copies against their record, the reader in Python and its twin in
-bash agreeing on every vendored profile and on variations of it, and no site's literal in the
-engine's code (Linear BEE-219; /mnt/project-files/sites/DESIGN.md sections 5.3 and 5.4).
+"""The site profile: every vendored copy read, the reader in Python and its twin in bash agreeing on
+every vendored profile and on variations of it, and no site's literal in the engine's code (Linear
+BEE-219; /mnt/project-files/sites/DESIGN.md sections 5.3 and 5.4). The copies against their ORIGIN,
+and the pull that refreshes them, are tests/test_boundary.py's (the interface standard's rule 3).
 
 The agreement test is the one that matters: bee-grid.sh and containers/build.sh read the profile
 with site.sh, before any container exists, and site.py is the reference the gate proves. A row
@@ -10,11 +11,9 @@ where the two differ is a bug in one of them.
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -39,74 +38,13 @@ def load(path: Path) -> dict[str, Any]:
     return data
 
 
-# --- the vendored copies -------------------------------------------------------------------------
-
-
-def origin() -> tuple[dict[str, str], dict[str, str]]:
-    head: dict[str, str] = {}
-    sums: dict[str, str] = {}
-    for line in (PROFILES / "ORIGIN").read_text().splitlines():
-        key, _, rest = line.partition(" ")
-        if key == "sha256":
-            digest, _, name = rest.partition(" ")
-            sums[name] = digest
-        else:
-            head[key] = rest
-    return head, sums
-
-
-def test_profiles_match_their_record() -> None:
-    head, sums = origin()
-    assert head["repository"] == "OpenSpineConsortium/hpcworker"
-    assert head["path"] == "framework/profiles"
-    assert re.fullmatch(r"[0-9a-f]{40}", head["commit"])
-    assert vendored(), "no profile is vendored"
-    assert sorted(sums) == [p.name for p in vendored()], "ORIGIN and the files list the same names"
-    for path in vendored():
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == sums[path.name], path.name
-
-
-@pytest.mark.skipif(not os.environ.get("HPCWORKER_DIR"), reason="HPCWORKER_DIR names no checkout")
-def test_profiles_match_hpcworker_at_the_recorded_commit() -> None:
-    head, _ = origin()
-    for path in vendored():
-        there = subprocess.run(
-            ["git", "-C", os.environ["HPCWORKER_DIR"], "show",
-             f"{head['commit']}:framework/profiles/{path.name}"],
-            capture_output=True, check=True,
-        )  # fmt: skip
-        assert there.stdout == path.read_bytes(), path.name
+# --- the vendored copies (tests/test_boundary.py checks them against their ORIGIN) ----------------
 
 
 @pytest.mark.parametrize("path", vendored(), ids=lambda p: p.stem)
 def test_every_profile_is_read_and_names_itself(path: Path) -> None:
     prof = site.SiteProfile.model_validate(load(path))
     assert prof.site == path.stem
-
-
-def test_pull_from_a_checkout_writes_the_same_record(tmp_path: Path) -> None:
-    # pull.sh --from reads every file at one commit and records it; run it on a scratch repository
-    # shaped like hpcworker, never on this checkout's own profiles.
-    src = tmp_path / "hpcworker"
-    (src / "framework" / "profiles").mkdir(parents=True)
-    shutil.copy(PROFILES / "wayne.json", src / "framework" / "profiles" / "wayne.json")
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.org",
-           "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}  # fmt: skip
-    for args in (["init", "-q", "-b", "main"], ["add", "."], ["commit", "-q", "-m", "p"]):
-        subprocess.run(["git", "-C", str(src), *args], check=True, env=env)
-    sha = subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"], capture_output=True,
-                         text=True, check=True, env=env).stdout.strip()  # fmt: skip
-    dest = tmp_path / "profiles"
-    dest.mkdir()
-    shutil.copy(PROFILES / "pull.sh", dest / "pull.sh")
-    out = subprocess.run(["bash", str(dest / "pull.sh"), "--from", str(src)], capture_output=True,
-                         text=True, env=env)  # fmt: skip
-    assert out.returncode == 0, out.stderr
-    assert (dest / "wayne.json").read_bytes() == (PROFILES / "wayne.json").read_bytes()
-    record = (dest / "ORIGIN").read_text()
-    assert f"commit {sha}\n" in record
-    assert (PROFILES / "ORIGIN").read_text().split("\n", 2)[2] == record.split("\n", 2)[2]
 
 
 # --- the reference, on its own -------------------------------------------------------------------
@@ -356,13 +294,15 @@ def site_literals(profile: dict[str, Any]) -> list[re.Pattern[str]]:
 
 
 def code_files() -> list[Path]:
-    """Everything the engine runs or bakes into its image; the vendored profiles and their record
-    are the data the list comes from, and the documents describe sites on purpose."""
+    """Everything the engine runs or bakes into its image, and the pull every import folder holds;
+    the vendored profiles and the pinned contract are the provider's data (the contract's vectors
+    name a site's values on purpose), and the documents describe sites on purpose."""
     skip = {".md", ".json", ".pyc"}
+    pulls = sorted(REPO.glob("*/pull.sh"))
     return sorted(
         p for r in (REPO / "src", REPO / "containers") for p in r.rglob("*")
         if p.is_file() and p.suffix not in skip and "__pycache__" not in p.parts
-    ) + [REPO / "containers" / "managed-settings.json", PROFILES / "pull.sh"]  # fmt: skip
+    ) + [REPO / "containers" / "managed-settings.json", *pulls]  # fmt: skip
 
 
 def offences(lines: list[str]) -> list[str]:

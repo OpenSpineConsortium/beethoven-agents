@@ -94,9 +94,24 @@ From: ubuntu:24.04
     export PATH=/opt/beethoven-agents/.pixi/envs/default/bin:/usr/local/bin:$PATH
     # The engine's package is bound at run time; this is where the job binds it.
     export PYTHONPATH=/work/src
-    # Belt and braces under --cleanenv: no credential variable survives into a job even if a caller
-    # set one. The engine authenticates only through the student's bound CLAUDE_CONFIG_DIR.
-    unset CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+    # Belt and braces under --cleanenv: no credential, endpoint or provider variable survives into
+    # a job even if a caller set one. The engine authenticates only through the student's bound
+    # CLAUDE_CONFIG_DIR. The names are bee's CREDENTIAL_VARS (tests/bee/test_image.py).
+    unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_PROFILE \
+        ANTHROPIC_ORGANIZATION_ID ANTHROPIC_FEDERATION_RULE_ID ANTHROPIC_WORKSPACE_ID \
+        ANTHROPIC_BASE_URL \
+        ANTHROPIC_AWS_API_KEY ANTHROPIC_AWS_BASE_URL ANTHROPIC_AWS_WORKSPACE_ID \
+        ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL \
+        ANTHROPIC_BEDROCK_REGION_PREFIX ANTHROPIC_BEDROCK_SERVICE_TIER \
+        ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_VERTEX_PROJECT_ID \
+        ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN ANTHROPIC_FOUNDRY_BASE_URL \
+        ANTHROPIC_FOUNDRY_RESOURCE \
+        AWS_BEARER_TOKEN_BEDROCK CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX \
+        CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_ANTHROPIC_AWS \
+        CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_GATEWAY \
+        CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR \
+        CLAUDE_CODE_OAUTH_REFRESH_TOKEN CLAUDE_CODE_OAUTH_SCOPES \
+        CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR
 
 %runscript
     # tini reaps the subprocesses claude -p spawns when a step is killed at its wall time.

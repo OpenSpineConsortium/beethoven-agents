@@ -13,6 +13,8 @@ from pydantic import ValidationError
 
 from beethoven_agents.bee import accounts as acc
 
+from .conftest import RULES
+
 A = acc.Account("a", "/h/a", True, 0)
 B = acc.Account("b", "/h/b", True, 1)
 C = acc.Account("c", None, True, 2)
@@ -135,6 +137,14 @@ def test_child_environment_loses_every_credential() -> None:
     assert acc.clean_child_env(parent) == {"PATH": "/bin", "HOME": "/h"}
 
 
+def test_bee_strips_everything_the_launcher_strips() -> None:
+    # hpcworker's list, from the pinned contract (rules.json, credential_variables); bee strips more
+    # (the key helpers, the other providers' switches and endpoints), never fewer.
+    names = RULES["credential_variables"]
+    assert names and set(names) <= set(acc.CREDENTIAL_VARS)
+    assert len(set(acc.CREDENTIAL_VARS)) == len(acc.CREDENTIAL_VARS)
+
+
 # What `claude auth status --json` answered in a cloud session for a directory nobody signed in to
 # (2026-10-04, Claude Code 2.1.289): a token from the host outranked the directory.
 MEASURED_HOST_TOKEN = {
@@ -158,6 +168,70 @@ def test_status_counts_only_the_directorys_own_subscription() -> None:
     assert not acc.interpret_status({"loggedIn": False}, "/d").ok
     old = {"loggedIn": True, "authMethod": "claude.ai"}
     assert acc.interpret_status(old, "/d").ok  # before configDirectory existed
+
+
+def test_the_launchers_rule_reads_what_bee_reads() -> None:
+    # A rule over another key is one bee's verdict does not apply yet: change interpret_status.
+    rule = RULES["subscription_signin"]
+    assert rule["read_keys"] == ["loggedIn", "authMethod", "apiProvider", "apiKeySource"]
+
+
+CASES: list[dict[str, str]] = RULES["signin_cases"]
+
+
+@pytest.mark.parametrize("case", CASES, ids=[f"{n}-{c['verdict']}" for n, c in enumerate(CASES)])
+def test_status_agrees_with_the_launchers_cases(tmp_path: Path, case: dict[str, str]) -> None:
+    # hpcworker's sign-in cases, from the pinned contract (rules.json, signin_cases): each input is
+    # what `claude auth status` printed, read by bee's own run_status from a stand-in that prints
+    # exactly that, as bee reads the real one.
+    (tmp_path / "answer").write_text(case["input"])
+    claude = tmp_path / "claude"
+    claude.write_text(f"#!/bin/sh\nexec cat '{tmp_path / 'answer'}'\n")
+    claude.chmod(0o755)
+    account = acc.Account("a", str(tmp_path / "a"))
+    got, _ = acc.run_status(account, str(claude), {"PATH": os.environ["PATH"]})
+    verdict = case["verdict"]
+    assert verdict in ("subscription", "other", "none")
+    assert got.ok == (verdict == "subscription"), got
+    payload = json.loads(case["input"]) if case["input"] else {}
+    assert (got.reason == "not signed in") == (verdict == "none" and payload != {}), got
+    if "apiKeySource" in payload and verdict == "other":
+        assert "API key" in got.reason and str(payload["apiKeySource"]) not in got.reason
+
+
+def test_the_launchers_cases_cover_every_verdict() -> None:
+    assert {c["verdict"] for c in CASES} == {"subscription", "other", "none"}
+
+
+# Payloads rules.json's cases do not hold, with what bee answers. An empty apiProvider is present
+# and not firstParty, which subscription_signin calls "other"; hpcworker's own shell verdict
+# (hpcw_claude_signin) reads an empty value as absent and says "subscription", and bee follows the
+# written rule, the stricter of the two. A null apiProvider bee reads as absent, as that shell does
+# (no case in rules.json says either way).
+MORE_CASES: list[tuple[dict[str, object], str]] = [
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": None}, "subscription"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": ""}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiKeySource": None}, "other"),
+    ({"loggedIn": True, "authMethod": "claude.ai", "apiKeySource": ""}, "other"),
+    ({"loggedIn": False, "authMethod": "claude.ai", "apiKeySource": "x"}, "none"),
+    ({"loggedIn": "true", "authMethod": "claude.ai"}, "none"),
+    ({}, "none"),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("payload", "verdict"), MORE_CASES)
+def test_status_beyond_the_launchers_cases(payload: dict[str, object], verdict: str) -> None:
+    got = acc.interpret_status(payload, None)
+    assert got.ok == (verdict == "subscription"), got
+    assert (got.reason == "not signed in") == (verdict == "none"), got
+
+
+def test_status_that_is_not_an_object_is_no_sign_in(tmp_path: Path) -> None:
+    claude = tmp_path / "claude"
+    claude.write_text("#!/bin/sh\necho '[true]'\n")
+    claude.chmod(0o755)
+    got, shown = acc.run_status(acc.Account("a", str(tmp_path / "a")), str(claude), {})
+    assert not got.ok and shown is None
 
 
 def test_transcript_seen_from_the_host() -> None:

@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from beethoven_agents.bee import cli
+
 from .conftest import FAKES, REPO, signed_in
 
 BEE = REPO / "src" / "beethoven_agents" / "bee"
@@ -218,6 +220,17 @@ def test_grid_refuses_inside_a_claude_code_session(grid: Grid, project: Path) ->
         assert out.returncode == 1 and "Claude Code session" in out.stderr, sub
     assert grid.calls() == []
     assert grid.run("list", CLAUDECODE="1").returncode == 0  # reading the list is fine
+
+
+def test_grid_checks_the_same_markers_as_bee(grid: Grid) -> None:
+    text = GRID_SH.read_text().replace("\\\n", " ")
+    loop = next(line for line in text.splitlines() if "for _m in" in line)
+    names = loop.split("for _m in", 1)[1].split(";", 1)[0].split()
+    assert names == list(cli.AGENT_MARKERS)
+    for marker in names:
+        out = grid.run("add", "x", **{marker: "1"})
+        assert out.returncode == 1 and f"({marker} is set)" in out.stderr, marker
+    assert grid.calls() == []
 
 
 def test_grid_gives_every_call_its_own_temp(grid: Grid) -> None:

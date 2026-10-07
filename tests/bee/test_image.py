@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 
-from .conftest import REPO
+from .conftest import REPO, RULES
 
 MANAGED = REPO / "containers" / "managed-settings.json"
 RECIPE = REPO / "containers" / "claude-verify.def"
@@ -69,3 +69,25 @@ def test_no_bee_hook_opens_the_transcript() -> None:
     for name in ("handoff.py", "claudeignore.py", "accounts.py", "cli.py"):
         text = (REPO / "src" / "beethoven_agents" / "bee" / name).read_text()
         assert not re.search(r"open\([^)]*transcript", text), name
+
+
+def test_image_unsets_every_variable_bee_strips() -> None:
+    # The recipe's %environment is the image's own line against a key, token, endpoint or provider
+    # a caller left set; it names the same variables bee strips from every child it starts.
+    from beethoven_agents.bee.accounts import CREDENTIAL_VARS
+
+    environment = RECIPE.read_text().split("%environment\n", 1)[1].split("\n%", 1)[0]
+    joined = environment.replace("\\\n", " ")
+    unset = [line.split()[1:] for line in joined.splitlines() if line.split()[:1] == ["unset"]]
+    assert len(unset) == 1
+    assert sorted(unset[0]) == sorted(CREDENTIAL_VARS)
+    assert set(RULES["credential_variables"]) <= set(unset[0])  # hpcworker's, pinned
+
+
+def test_image_leaves_remote_control_its_switches() -> None:
+    # An env value in the managed settings overwrites what a job exports, and hpcworker's rules
+    # (rules.json, remote_control_variables) say these switch off what Remote Control needs: the
+    # image never sets them, so a master that runs Remote Control can leave them unset.
+    env = json.loads(MANAGED.read_text())["env"]
+    names = RULES["remote_control_variables"]["names"]
+    assert names and not set(names) & set(env)

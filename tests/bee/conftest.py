@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from beethoven_agents.bee.cli import AGENT_MARKERS
+
 FAKES = Path(__file__).resolve().parent / "fakes"
 REPO = Path(__file__).resolve().parents[2]
+# hpcworker's rules for every program that starts or judges Claude Code, from the pinned copy of
+# its contract export (contract/ORIGIN); bee's own lists are held to it, never the other way round.
+RULES: dict[str, Any] = json.loads((REPO / "contract" / "rules.json").read_text("utf-8"))
 
 
 @pytest.fixture
@@ -25,13 +32,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("BEETHOVEN_RUN_ROOT", raising=False)
     monkeypatch.delenv("BEE_ACCOUNT", raising=False)
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
-    for marker in (
-        "CLAUDECODE",
-        "BEETHOVEN_REQUEST_ID",
-        "ASHLEY_REQUEST_ID",
-        "SLURM_JOB_ID",
-        "SLURMD_NODENAME",
-    ):
+    for marker in (*AGENT_MARKERS, "SLURM_JOB_ID", "SLURMD_NODENAME"):
         monkeypatch.delenv(marker, raising=False)
     monkeypatch.setenv("BEE_CLAUDE", str(FAKES / "claude"))
     monkeypatch.setenv("BEE_NOT_A_CLUSTER", "1")

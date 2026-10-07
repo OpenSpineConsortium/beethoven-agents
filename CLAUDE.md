@@ -382,12 +382,23 @@ says what is locked there and what a job sets per step.
   (REPO_SPLIT.md section 2).
 - `containers/` — the Apptainer recipe (Node + Claude Code CLI + this pixi env + the managed
   settings, the guard and the pinned beethoven-qa), the build script and the recorded digest.
+- `interface/` — what this repository offers other repositories and what it takes from them
+  (`INTERFACE.json`, under the interface standard; `README.md` says how): today the export
+  `registry`, the JSON Schemas of bee's `accounts.json` and `usage/<label>.json`, which
+  beethoven-desktop and beethoven-vscode read. `tests/test_interface.py` and `tests/test_boundary.py`
+  hold the manifest, the exports and the pinned copies to it.
 - `profiles/` — hpcworker's composed site profiles, vendored as data (`ORIGIN` names the commit and
-  each file's sha256; `pull.sh` refreshes them; never edited here). One profile is one deployment:
+  each file's sha256; `pull.sh` refreshes them from a commit on hpcworker's `main`, through `gh`,
+  never from a checkout; never edited here). One profile is one deployment:
   a university's cluster and the lab on it (`/mnt/project-files/sites/DESIGN.md`, Linear BEE-219).
   Nothing of one university is written into the engine's code: the runtime and its module, the
   image folder and the node-local disk come from the profile, and `tests/test_site.py` fails on a
   line of `src/` or `containers/` that spells a vendored site's host, path, partition or QoS.
+- `contract/` — hpcworker's export `contract`, pinned the same way (`ORIGIN`, the same `pull.sh`):
+  its `rules.json` is what bee's credential variables, agent markers and sign-in verdict, the
+  guard's list and the image's unset line are tested against (`tests/bee/`, `tests/test_guard.py`);
+  the code keeps its own lists, since the image and a laptop's bee run without the folder. Never
+  edited here.
 - `src/beethoven_agents/` — the package: `site.py` (the profile read as data, the reference, gated)
   and `site.sh` (its bash twin, which bee-grid.sh and containers/build.sh source before any container
   exists; the tests compare the two on every vendored profile), `guard.py` (the PreToolUse guard the

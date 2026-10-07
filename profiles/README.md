@@ -1,15 +1,23 @@
 # Site profiles, vendored as data
 
-The composed site profiles of hpcworker (`framework/profiles/<id>.json` there), copied byte for byte.
-One profile describes one deployment: a university's cluster and the lab that runs Beethoven on it.
-The engine reads them as data and imports nothing of hpcworker (`plan/REPO_SPLIT.md` section 2); the
-design of site modules is `/mnt/project-files/sites/DESIGN.md` (Linear BEE-198, BEE-219).
+The composed site profiles of hpcworker (`framework/profiles/<id>.json` there, its export `profiles`
+version 1), copied byte for byte. One profile describes one deployment: a university's cluster and
+the lab that runs Beethoven on it. The engine reads them as data and imports nothing of hpcworker
+(`plan/REPO_SPLIT.md` section 2); the design of site modules is `/mnt/project-files/sites/DESIGN.md`
+(Linear BEE-198, BEE-219). This folder is one import of `interface/INTERFACE.json`, under the
+interface standard's rule 3 (`interface/README.md`).
 
-- `ORIGIN` names the hpcworker commit the files were read at and each file's sha256;
-  `tests/test_site.py` fails when a file differs from its record, and, with `HPCWORKER_DIR` set to a
-  checkout, when the record differs from that checkout.
-- `bash profiles/pull.sh` refreshes the files and the record (`--from DIR` for a local checkout).
-  Never edit a profile here; change it in hpcworker and pull.
+- `ORIGIN` names the hpcworker commit the files were read at (on hpcworker's `main`), the export and
+  its version, and each file's sha256. `tests/test_boundary.py` fails when a file differs from its
+  record, the folder holds a file the record does not list, or the record names another export or
+  version than the import.
+- `bash profiles/pull.sh [--ref REF]` refreshes the files and the record from GitHub, through `gh`
+  and the person's own sign-in, from a commit hpcworker's `main` contains, taking only the files
+  hpcworker's `interface/INTERFACE.json` lists under `profiles` at that commit. It is the same
+  script as every other import folder's (`interface/README.md`), and takes which export from this
+  repository's manifest. It never reads a checkout of hpcworker and never deletes: a profile
+  hpcworker no longer has is listed for a person to remove in a reviewed commit. Never edit a
+  profile here; change it in hpcworker (or its site module in beethoven-sites) and pull.
 - What reads them: `bee-grid.sh` and `containers/build.sh`, through `src/beethoven_agents/site.sh`,
   with `BEE_SITE=<id>` (otherwise they read the account's own `~/.hpcworker/profile.json`), and the
   site-literal lint in `tests/test_site.py`, which builds its list of forbidden values from them.

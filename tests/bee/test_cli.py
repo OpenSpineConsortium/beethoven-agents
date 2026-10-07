@@ -12,7 +12,7 @@ import pytest
 from beethoven_agents.bee import accounts as acc
 from beethoven_agents.bee import cli, handoff
 
-from .conftest import FAKES, REPO, signed_in
+from .conftest import FAKES, REPO, RULES, signed_in
 
 NOW = acc.now()
 
@@ -273,6 +273,28 @@ def test_nothing_starts_inside_a_claude_code_session(
     assert bee("run", "a", "--project", str(project), "--once") == 1
     assert "Claude Code session" in capsys.readouterr().err
     assert bee("account", "login", "c") == 1
+
+
+# hpcworker's agent markers, from the pinned contract (rules.json, agent_markers): bee refuses to
+# start Claude Code or sign an account in under exactly these, and under none set to "".
+MARKERS: list[str] = RULES["agent_markers"]["names"]
+
+
+def test_bee_refuses_under_exactly_the_launchers_markers() -> None:
+    assert cli.AGENT_MARKERS == tuple(MARKERS)
+
+
+@pytest.mark.parametrize("marker", MARKERS)
+def test_every_agent_marker_refuses(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], marker: str
+) -> None:
+    three(home)
+    capsys.readouterr()
+    monkeypatch.setenv(marker, "")
+    assert bee("account", "login", "a") == 0  # set but empty is not a marker
+    monkeypatch.setenv(marker, "1")
+    assert bee("account", "login", "c") == 1
+    assert f"({marker} is set)" in capsys.readouterr().err
 
 
 def test_pin_and_unpin(home: Path, project: Path) -> None:
