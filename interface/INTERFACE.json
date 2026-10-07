@@ -1,0 +1,33 @@
+{
+ "format": 1,
+ "name": "beethoven-agents",
+ "repository": "OpenSpineConsortium/beethoven-agents",
+ "summary": "The Beethoven engine's nested agentic framework: the substrate image, the guard, bee's accounts and the orchestration of Claude Code steps as Slurm jobs.",
+ "standard": "https://github.com/OpenSpineConsortium/beethoven/blob/main/INTERFACES.md",
+ "exports": [
+  {
+   "id": "registry",
+   "kind": "schema",
+   "version": 1,
+   "summary": "bee's account files as JSON Schema: accounts.json version 1 (generated from bee's own model) and usage/<label>.json (what bee's status-line hook writes)",
+   "paths": ["interface/bee/"],
+   "consumers": ["OpenSpineConsortium/beethoven-desktop", "OpenSpineConsortium/beethoven-vscode"]
+  }
+ ],
+ "imports": [
+  {
+   "repository": "OpenSpineConsortium/beethoven-qa",
+   "export": "package",
+   "version": 1,
+   "into": "vendor/beethoven-qa",
+   "origin": "vendor/beethoven-qa/ORIGIN"
+  },
+  {
+   "repository": "OpenSpineConsortium/hpcworker",
+   "export": "profiles",
+   "version": 1,
+   "into": "profiles",
+   "origin": "profiles/ORIGIN"
+  }
+ ]
+}
