@@ -4,8 +4,9 @@ is a pinned copy that matches its ORIGIN, fetched only by its folder's pull.sh.
 
 A line that reaches a sibling checkout fails unless it is on the known list below with its reason,
 and an entry that no longer matches fails too, so the list only shrinks. beethoven-qa's own boundary
-command takes over these checks once this repository's pinned copy carries it (the re-pin to
-beethoven-qa 2.0.0 or later); until then they are this file's.
+command (the gate's `boundary` lane, since the re-pin to beethoven-qa 2.0.0) checks the same rules
+over the whole tree; this file keeps its own checks beside it, the hpcworker imports' pull.sh
+among them.
 """
 
 from __future__ import annotations

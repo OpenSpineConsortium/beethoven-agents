@@ -42,9 +42,9 @@ when it builds its study image), and the guard and the managed settings baked in
 The four beethoven-qa imports share one copy and one record, `vendor/beethoven-qa/ORIGIN`, in
 beethoven-qa's own form (repository, ref, commit, tree digest, file count), taken with its `vendor`
 command and checked by `pixi run --locked vendor-check`. The copy pinned today is beethoven-qa
-1.0.0, which publishes no manifest; beethoven-qa's `boundary` command checks these four entries
-against the copy's own `interface/INTERFACE.json` from the re-pin to 2.0.0 on, and until then this
-repository's tests leave the copy to `vendor-check`.
+2.0.0, which carries beethoven-qa's own `interface/INTERFACE.json`: its `boundary` command, the
+gate's `boundary` lane, checks these four entries against that manifest, and this repository's
+tests leave the copy's files to `vendor-check`.
 
 Each hpcworker import is a folder of its own holding the export's files, its `ORIGIN`
 (`repository`, `commit`, `export <id> <version>`, one `sha256` line per file, sorted by path), a
@@ -90,9 +90,10 @@ differs from `ORIGIN`. Both files land at the folder's top (`interface/bee/accou
   list, empty today, that fails when an entry goes stale); no submodule and no other repository
   checked out in CI; each hpcworker import equals its `ORIGIN`, names its export and version, and
   holds the one `pull.sh`, which runs against a stand-in for `gh`. beethoven-qa's boundary command
-  takes these over once the pinned copy carries it.
+  (`pixi run --locked boundary`) checks the five rules over the whole tree beside these tests.
 - `tests/bee/` and `tests/test_guard.py`: bee's credential variables, agent markers and sign-in
   verdict against the pinned `contract/rules.json`.
 - `pixi run --locked vendor-check`: the beethoven-qa copy against its record.
 
-All run in `pixi run --locked test` and `vendor-check`, so in the gate before every push and in CI.
+All run in `pixi run --locked test`, `boundary` and `vendor-check`, so in the gate before every
+push and in CI.
