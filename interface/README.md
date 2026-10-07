@@ -32,15 +32,34 @@ when it builds its study image), and the guard and the managed settings baked in
 
 | From | Export | Version | Into | Record |
 | --- | --- | --- | --- | --- |
-| beethoven-qa | `package` | 1 | `vendor/beethoven-qa/` | `vendor/beethoven-qa/ORIGIN` in beethoven-qa's own form (repository, ref, commit, tree digest, file count), taken with its `vendor` command and checked by `pixi run --locked vendor-check` |
-| hpcworker | `profiles` | 1 | `profiles/` | `profiles/ORIGIN` (repository, commit, export, one sha256 per file), taken with `profiles/pull.sh` and checked by `tests/test_boundary.py` |
+| beethoven-qa | `python` | 1 | `vendor/beethoven-qa/` | `beethoven_qa.contracts` and `beethoven_qa.__version__`, nothing else of the package (the tests import `ViolationError` from the first) |
+| beethoven-qa | `cli` | 1 | `vendor/beethoven-qa/` | `python -m beethoven_qa gate`, `vendor-check` and `standards`, the pixi tasks of the same names |
+| beethoven-qa | `kit` | 1 | `vendor/beethoven-qa/` | the five kit files, byte for byte (`.githooks/pre-push`, `.github/workflows/automerge.yml`, `rulesets.yml`, `standards.yml`, `.claude/hooks/session-start.sh`) |
+| beethoven-qa | `plugin` | 1 | `vendor/beethoven-qa/` | the Claude Code plugin the image registers as a `directory` marketplace |
+| hpcworker | `profiles` | 1 | `profiles/` | the composed site profiles, read as data by `site.py` and `site.sh` |
+| hpcworker | `contract` | 1 | `contract/` | `rules.json`: the credential variables bee, the guard and the image strip or refuse, the agent markers bee and `bee-grid.sh` refuse under, and the sign-in cases bee's verdict is run against |
 
-beethoven-qa has not published its own `INTERFACE.json` yet, so `package` version 1 is the name
-this manifest expects for the pinned copy; it is reconciled with beethoven-qa's manifest at the
-re-pin to beethoven-qa 2.0.0. The profiles were copied before hpcworker published its manifest, so
-their record names the commit on hpcworker's `main` the bytes equal and no `export` line; the next
-pull writes one. The direction is the engine's: beethoven-qa <- beethoven-agents <- the research
-pipeline, with the launcher's data beside it; nothing of the research pipeline is taken here.
+The four beethoven-qa imports share one copy and one record, `vendor/beethoven-qa/ORIGIN`, in
+beethoven-qa's own form (repository, ref, commit, tree digest, file count), taken with its `vendor`
+command and checked by `pixi run --locked vendor-check`. The copy pinned today is beethoven-qa
+1.0.0, which publishes no manifest; beethoven-qa's `boundary` command checks these four entries
+against the copy's own `interface/INTERFACE.json` from the re-pin to 2.0.0 on, and until then this
+repository's tests leave the copy to `vendor-check`.
+
+Each hpcworker import is a folder of its own holding the export's files, its `ORIGIN`
+(`repository`, `commit`, `export <id> <version>`, one `sha256` line per file, sorted by path), a
+`README.md` and a `pull.sh`. Every such `pull.sh` is the same script, byte for byte: it reads which
+repository, export and version from the import here whose `into` is its folder, resolves
+`--ref REF` (default `main`) through `gh` and the person's own sign-in, refuses a commit the
+provider's default branch does not contain and an export or version the provider's manifest at
+that commit does not offer, takes only the paths that manifest lists, and never deletes (a file the
+provider dropped is listed for a person to remove in a reviewed commit). Neither is ever read from
+a checkout of hpcworker. The engine reads none of the contract's vectors, schemas, lines or
+commands: bee drives no hpcworker command and reads no file a worker writes, so `rules.json` is the
+part of the export with a reader here, and `tests/bee/` holds each of bee's own lists to it.
+
+The direction is the engine's: beethoven-qa <- beethoven-agents <- the research pipeline, with the
+launcher's data and rules beside it; nothing of the research pipeline is taken here.
 
 ## How a client takes the export
 
@@ -69,8 +88,11 @@ differs from `ORIGIN`. Both files land at the folder's top (`interface/bee/accou
   comes from beethoven-qa or hpcworker; the two schemas against the model and the hook.
 - `tests/test_boundary.py`: no tracked file reaches another repository's checkout (with a known
   list, empty today, that fails when an entry goes stale); no submodule and no other repository
-  checked out in CI; each import equals its `ORIGIN`; `profiles/pull.sh` against a stand-in for
-  `gh`. beethoven-qa's boundary command takes these over once the pinned copy carries it.
+  checked out in CI; each hpcworker import equals its `ORIGIN`, names its export and version, and
+  holds the one `pull.sh`, which runs against a stand-in for `gh`. beethoven-qa's boundary command
+  takes these over once the pinned copy carries it.
+- `tests/bee/` and `tests/test_guard.py`: bee's credential variables, agent markers and sign-in
+  verdict against the pinned `contract/rules.json`.
 - `pixi run --locked vendor-check`: the beethoven-qa copy against its record.
 
 All run in `pixi run --locked test` and `vendor-check`, so in the gate before every push and in CI.

@@ -204,8 +204,13 @@ def test_every_credential_variable_is_refused(name: str) -> None:
 
 
 def test_guard_refuses_what_bee_strips() -> None:
-    # The image runs guard.py alone, so it types the list again; the two never drift apart.
+    # The image runs guard.py alone, so it types the list again; the two never drift apart, and
+    # both hold hpcworker's (the pinned contract's rules.json, credential_variables).
     assert CREDENTIAL_VARS == accounts.CREDENTIAL_VARS
+    pinned = Path(__file__).resolve().parent.parent / "contract" / "rules.json"
+    rules = json.loads(pinned.read_text(encoding="utf-8"))
+    assert rules["credential_variables"]
+    assert set(rules["credential_variables"]) <= set(CREDENTIAL_VARS)
 
 
 def test_asks_for_the_two_borderline_cases() -> None:

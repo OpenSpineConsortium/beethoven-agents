@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 
-from .conftest import REPO
+from .conftest import REPO, RULES
 
 MANAGED = REPO / "containers" / "managed-settings.json"
 RECIPE = REPO / "containers" / "claude-verify.def"
@@ -81,3 +81,13 @@ def test_image_unsets_every_variable_bee_strips() -> None:
     unset = [line.split()[1:] for line in joined.splitlines() if line.split()[:1] == ["unset"]]
     assert len(unset) == 1
     assert sorted(unset[0]) == sorted(CREDENTIAL_VARS)
+    assert set(RULES["credential_variables"]) <= set(unset[0])  # hpcworker's, pinned
+
+
+def test_image_leaves_remote_control_its_switches() -> None:
+    # An env value in the managed settings overwrites what a job exports, and hpcworker's rules
+    # (rules.json, remote_control_variables) say these switch off what Remote Control needs: the
+    # image never sets them, so a master that runs Remote Control can leave them unset.
+    env = json.loads(MANAGED.read_text())["env"]
+    names = RULES["remote_control_variables"]["names"]
+    assert names and not set(names) & set(env)

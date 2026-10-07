@@ -294,13 +294,15 @@ def site_literals(profile: dict[str, Any]) -> list[re.Pattern[str]]:
 
 
 def code_files() -> list[Path]:
-    """Everything the engine runs or bakes into its image; the vendored profiles and their record
-    are the data the list comes from, and the documents describe sites on purpose."""
+    """Everything the engine runs or bakes into its image, and the pull every import folder holds;
+    the vendored profiles and the pinned contract are the provider's data (the contract's vectors
+    name a site's values on purpose), and the documents describe sites on purpose."""
     skip = {".md", ".json", ".pyc"}
+    pulls = sorted(REPO.glob("*/pull.sh"))
     return sorted(
         p for r in (REPO / "src", REPO / "containers") for p in r.rglob("*")
         if p.is_file() and p.suffix not in skip and "__pycache__" not in p.parts
-    ) + [REPO / "containers" / "managed-settings.json", PROFILES / "pull.sh"]  # fmt: skip
+    ) + [REPO / "containers" / "managed-settings.json", *pulls]  # fmt: skip
 
 
 def offences(lines: list[str]) -> list[str]:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,6 +14,9 @@ from beethoven_agents.bee.cli import AGENT_MARKERS
 
 FAKES = Path(__file__).resolve().parent / "fakes"
 REPO = Path(__file__).resolve().parents[2]
+# hpcworker's rules for every program that starts or judges Claude Code, from the pinned copy of
+# its contract export (contract/ORIGIN); bee's own lists are held to it, never the other way round.
+RULES: dict[str, Any] = json.loads((REPO / "contract" / "rules.json").read_text("utf-8"))
 
 
 @pytest.fixture

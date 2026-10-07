@@ -149,32 +149,51 @@ def recorded(lines: list[str]) -> dict[str, str]:
     return {line.split(" ", 2)[2]: line.split(" ")[1] for line in lines if line[:7] == "sha256 "}
 
 
-@pytest.mark.parametrize("imp", imports(), ids=lambda i: str(i["into"]))
+def pinned() -> list[dict[str, object]]:
+    """The imports this repository's tests hold to their ORIGIN: all but beethoven-qa's copy, which
+    keeps its own record (ref, commit, tree digest) and its own check, `pixi run --locked
+    vendor-check`, which the gate runs."""
+    return [i for i in imports() if i["repository"] != "OpenSpineConsortium/beethoven-qa"]
+
+
+def test_beethoven_qa_is_left_to_its_own_check() -> None:
+    qa = [i for i in imports() if i not in pinned()]
+    assert qa and {i["into"] for i in qa} == {"vendor/beethoven-qa"}
+    for imp in qa:
+        assert origin_lines(imp)[0] == f"repository: {imp['repository']}"
+
+
+@pytest.mark.parametrize("imp", pinned(), ids=lambda i: f"{i['into']}:{i['export']}")
 def test_each_import_matches_its_origin(imp: dict[str, object]) -> None:
     lines = origin_lines(imp)
-    if imp["repository"] == "OpenSpineConsortium/beethoven-qa":
-        # beethoven-qa's copy keeps its own record (ref, commit, tree digest) and its own check,
-        # `pixi run --locked vendor-check`, which the gate runs.
-        assert lines[0] == f"repository: {imp['repository']}"
-        return
     assert lines[0] == f"repository {imp['repository']}"
     assert re.fullmatch(r"commit [0-9a-f]{40}", lines[1])
-    assert all(re.fullmatch(r"(repository|commit|export|sha256) .+", line) for line in lines)
-    # A copy taken before its provider published INTERFACE.json has no export line; the next pull
-    # writes one, and from then on it must name the import's export and version.
-    exports = [line for line in lines if line.startswith("export ")]
-    assert exports in ([], [f"export {imp['export']} {imp['version']}"])
+    assert lines[2] == f"export {imp['export']} {imp['version']}"
+    files = [line.split(" ", 2)[2] for line in lines[3:]]
+    assert all(re.fullmatch(r"sha256 [0-9a-f]{64} \S+", line) for line in lines[3:])
+    assert files == sorted(files) and len(set(files)) == len(files)
     assert present(REPO / str(imp["into"])) == recorded(lines), (
         f"{imp['into']} differs from its ORIGIN: take a new copy with its pull.sh"
     )
 
 
+def test_every_import_folder_holds_the_one_pull() -> None:
+    # One script, which reads its import from the manifest, so a fix made to one reaches each.
+    scripts = {str(i["into"]): REPO / str(i["into"]) / "pull.sh" for i in pinned()}
+    assert len(scripts) == len(pinned())  # one folder per import
+    first = next(iter(scripts.values())).read_bytes()
+    for into, script in scripts.items():
+        assert script.read_bytes() == first, f"{into}/pull.sh differs from the others"
+        assert os.access(script, os.X_OK), into
+
+
 # --- rule 3: the pull, against a stand-in for gh -------------------------------------------------
 
 SHA = "5" * 40
+TOKEN = "gho_a-value-nothing-may-print"
 FAKE_GH = """#!/bin/bash
 # A stand-in for gh: answers pull.sh's calls from $FAKE_GH_DIR and records what it was asked.
-printf '%s|%s\\n' "${GITHUB_TOKEN-unset}" "$*" >> "$FAKE_GH_DIR/calls"
+printf '%s\\n' "$*" >> "$FAKE_GH_DIR/calls"
 url=""; for a in "$@"; do case "$a" in repos/*) url="$a" ;; esac; done
 case "$url" in
   */commits/*) cat "$FAKE_GH_DIR/sha" ;;
@@ -185,82 +204,130 @@ case "$url" in
   *) exit 1 ;;
 esac
 """
-TREE = (
-    "framework/lib/profile.py",
-    "framework/profiles/README.md",
-    "framework/profiles/wayne.json",
-    "interface/INTERFACE.json",
-)
 
 
 class Pull:
-    """profiles/pull.sh copied into a scratch folder, with gh answering from local files."""
+    """One import folder's pull.sh in a scratch repository that carries this repository's
+    manifest, with gh answering from local files as hpcworker would."""
 
-    def __init__(self, tmp: Path) -> None:
+    def __init__(self, tmp: Path, into: str) -> None:
         self.gh = tmp / "gh-data"
-        self.dest = tmp / "profiles"
-        files = self.gh / "files"
+        self.root = tmp / "repo"
+        self.dest = self.root / into
         bin_dir = tmp / "bin"
-        for d in (files / "framework" / "profiles", files / "interface", self.dest, bin_dir):
-            d.mkdir(parents=True)
+        for d in (self.gh / "files", self.root / "interface", self.dest, bin_dir):
+            d.mkdir(parents=True, exist_ok=True)
         (bin_dir / "gh").write_text(FAKE_GH)
         (bin_dir / "gh").chmod(0o755)
-        shutil.copy(REPO / "profiles" / "pull.sh", self.dest / "pull.sh")
-        shutil.copy(REPO / "profiles" / "wayne.json", files / "framework" / "profiles")
-        (files / "framework" / "profiles" / "README.md").write_text("not a profile\n")
+        shutil.copy(REPO / "interface" / "INTERFACE.json", self.root / "interface")
+        shutil.copy(REPO / into / "pull.sh", self.dest / "pull.sh")
         (self.gh / "sha").write_text(SHA + "\n")
-        (self.gh / "status").write_text("identical\n")
-        (self.gh / "tree").write_text("\n".join(TREE) + "\n")
-        self.offer(1)
+        (self.gh / "status").write_text("ahead\n")
+        self.tree: list[str] = []
+        self.exports: list[dict[str, object]] = []
         path = f"{bin_dir}:{os.environ['PATH']}"
-        self.env = {**os.environ, "PATH": path, "FAKE_GH_DIR": str(self.gh), "GITHUB_TOKEN": "x"}
+        # gh's own sign-in includes the token variables, so they stay set; none may leak.
+        self.env = {**os.environ, "PATH": path, "FAKE_GH_DIR": str(self.gh), "GH_TOKEN": TOKEN}
 
-    def offer(self, version: int) -> None:
-        export = {"id": "profiles", "version": version, "paths": ["framework/profiles/*.json"]}
-        (self.gh / "files" / "interface" / "INTERFACE.json").write_text(
-            json.dumps({"exports": [export]})
-        )
+    def provide(self, path: str, data: bytes) -> None:
+        (self.gh / "files" / path).parent.mkdir(parents=True, exist_ok=True)
+        (self.gh / "files" / path).write_bytes(data)
+        self.tree.append(path)
+        # in the order given, so a test can hand the pull a listing that is not sorted
+        (self.gh / "tree").write_text("\n".join(self.tree) + "\n")
+
+    def offer(self, export: str, version: int, paths: list[str]) -> None:
+        self.exports = [e for e in self.exports if e["id"] != export]
+        self.exports.append({"id": export, "version": version, "paths": paths})
+        manifest = json.dumps({"exports": self.exports}).encode()
+        if "interface/INTERFACE.json" in self.tree:
+            (self.gh / "files" / "interface" / "INTERFACE.json").write_bytes(manifest)
+        else:
+            self.provide("interface/INTERFACE.json", manifest)
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        done = subprocess.run(
             ["bash", str(self.dest / "pull.sh"), *args],
             capture_output=True,
             text=True,
             env=self.env,
             stdin=subprocess.DEVNULL,
         )
+        calls = (self.gh / "calls").read_text() if (self.gh / "calls").exists() else ""
+        assert TOKEN not in calls + done.stdout + done.stderr  # never in argv, never printed
+        return done
 
     def names(self) -> list[str]:
-        return sorted(p.name for p in self.dest.iterdir())
+        return sorted(p.relative_to(self.dest).as_posix() for p in self.dest.rglob("*"))
 
 
 def test_pull_takes_only_the_export_at_a_merged_commit(tmp_path: Path) -> None:
-    pull = Pull(tmp_path)
+    pull = Pull(tmp_path, "profiles")
+    ours = (REPO / "profiles" / "wayne.json").read_bytes()
+    pull.provide("framework/profiles/wayne.json", ours)
+    pull.provide("framework/profiles/README.md", b"not a profile\n")
+    pull.provide("framework/lib/profile.py", b"print('never taken')\n")
+    pull.offer("profiles", 1, ["framework/profiles/*.json"])
     (pull.dest / "old.json").write_text("{}\n")
     out = pull.run()
     assert out.returncode == 0, out.stderr
-    ours = REPO / "profiles" / "wayne.json"
-    assert (pull.dest / "wayne.json").read_bytes() == ours.read_bytes()
+    assert (pull.dest / "wayne.json").read_bytes() == ours
     assert pull.names() == ["ORIGIN", "old.json", "pull.sh", "wayne.json"]  # nothing deleted
     record = (pull.dest / "ORIGIN").read_text().splitlines()
     head = ["repository OpenSpineConsortium/hpcworker", f"commit {SHA}", "export profiles 1"]
     assert record[:3] == head
     # the same bytes as this checkout's copy, recorded the same way
-    profiles = next(i for i in imports() if i["into"] == "profiles")
+    profiles = next(i for i in pinned() if i["into"] == "profiles")
     assert recorded(record) == recorded(origin_lines(profiles))
     assert "export any more: profiles/old.json (remove it in a reviewed commit)" in out.stdout
-    calls = (pull.gh / "calls").read_text().splitlines()
-    assert calls and all(c.startswith("unset|") for c in calls)  # the person's own sign-in only
+    calls = (pull.gh / "calls").read_text()
+    assert f"compare/{SHA}...main" in calls  # the commit against the default branch
+
+
+def test_pull_lands_a_folder_export_below_its_folder_sorted(tmp_path: Path) -> None:
+    pull = Pull(tmp_path, "contract")
+    for path in ("interface/contract/vectors/b.json", "interface/contract/vectors/a.json",
+                 "interface/contract/rules.json", "interface/contract/cli.json"):  # fmt: skip
+        pull.provide(path, json.dumps({"from": path}).encode())
+    pull.provide("interface/testbed/fakebin/sbatch", b"#!/bin/sh\n")
+    pull.offer("contract", 1, ["interface/contract/"])
+    pull.offer("testbed", 1, ["interface/testbed/"])
+    out = pull.run()
+    assert out.returncode == 0, out.stderr
+    landed = ["cli.json", "rules.json", "vectors/a.json", "vectors/b.json"]
+    record = (pull.dest / "ORIGIN").read_text().splitlines()
+    assert record[2] == "export contract 1"
+    assert [line.split(" ", 2)[2] for line in record[3:]] == landed  # sorted by path
+    assert present(pull.dest) == recorded(record)
+    assert sorted(set(pull.names()) - {"vectors"}) == sorted(["ORIGIN", "pull.sh", *landed])
+    assert json.loads((pull.dest / "vectors" / "a.json").read_text()) == {
+        "from": "interface/contract/vectors/a.json"
+    }
 
 
 def test_pull_refuses_what_main_does_not_hold(tmp_path: Path) -> None:
-    pull = Pull(tmp_path)
-    (pull.gh / "status").write_text("diverged\n")
-    out = pull.run("--ref", "claude/some-branch")
-    assert out.returncode == 1 and "take only what was merged" in out.stderr
-    pull.offer(2)
-    (pull.gh / "status").write_text("behind\n")
+    pull = Pull(tmp_path, "profiles")
+    pull.provide("framework/profiles/wayne.json", b"{}\n")
+    pull.offer("profiles", 1, ["framework/profiles/*.json"])
+    for status in ("behind", "diverged"):  # main is behind the commit, or apart from it
+        (pull.gh / "status").write_text(status + "\n")
+        out = pull.run("--ref", "claude/some-branch")
+        assert out.returncode == 1 and "take only what was merged" in out.stderr
+    (pull.gh / "status").write_text("identical\n")
+    pull.offer("profiles", 2, ["framework/profiles/*.json"])
     out = pull.run()
     assert out.returncode == 1 and "does not offer profiles version 1" in out.stderr
-    assert pull.names() == ["pull.sh"]  # nothing written either time
+    assert pull.names() == ["pull.sh"]  # nothing written any time
     assert pull.run("--from", str(tmp_path)).returncode == 2  # never from a checkout
+
+
+def test_pull_takes_only_what_the_manifest_declares(tmp_path: Path) -> None:
+    pull = Pull(tmp_path, "profiles")
+    stray = pull.root / "elsewhere"
+    stray.mkdir()
+    shutil.copy(pull.dest / "pull.sh", stray / "pull.sh")
+    out = subprocess.run(
+        ["bash", str(stray / "pull.sh")], capture_output=True, text=True, env=pull.env
+    )
+    assert out.returncode == 1 and "not an import of interface/INTERFACE.json" in out.stderr
+    assert not (pull.gh / "calls").exists()  # refused before gh was asked anything

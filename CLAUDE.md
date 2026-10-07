@@ -394,6 +394,11 @@ says what is locked there and what a job sets per step.
   Nothing of one university is written into the engine's code: the runtime and its module, the
   image folder and the node-local disk come from the profile, and `tests/test_site.py` fails on a
   line of `src/` or `containers/` that spells a vendored site's host, path, partition or QoS.
+- `contract/` — hpcworker's export `contract`, pinned the same way (`ORIGIN`, the same `pull.sh`):
+  its `rules.json` is what bee's credential variables, agent markers and sign-in verdict, the
+  guard's list and the image's unset line are tested against (`tests/bee/`, `tests/test_guard.py`);
+  the code keeps its own lists, since the image and a laptop's bee run without the folder. Never
+  edited here.
 - `src/beethoven_agents/` — the package: `site.py` (the profile read as data, the reference, gated)
   and `site.sh` (its bash twin, which bee-grid.sh and containers/build.sh source before any container
   exists; the tests compare the two on every vendored profile), `guard.py` (the PreToolUse guard the

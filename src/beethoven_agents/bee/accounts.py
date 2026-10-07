@@ -84,8 +84,9 @@ FALLBACK_REST_S = 5 * 3600
 # Every variable that outranks a sign-in directory in Claude Code's authentication order, or routes
 # the session to a provider that bills (code.claude.com/docs, authentication and env-vars pages,
 # read 2026-10-04). A child process never inherits one: the directory decides, and only a
-# subscription is ever used. hpcworker's strip list is canonical for the launcher (its job's
-# CLEAN_ENV); every name of it is here (tests/bee/test_accounts.py); the rest are this file's own.
+# subscription is ever used. hpcworker's list is canonical (credential_variables in the pinned
+# contract/rules.json); every name of it is here (tests/bee/test_accounts.py); the rest are this
+# file's own.
 CREDENTIAL_VARS: tuple[str, ...] = (
     "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE",
     "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_WORKSPACE_ID",

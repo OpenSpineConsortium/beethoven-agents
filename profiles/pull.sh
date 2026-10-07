@@ -1,20 +1,22 @@
 #!/bin/bash
-# Refresh profiles/ from OpenSpineConsortium/hpcworker's export "profiles" (its composed site
-# profiles, one per deployment) and write ORIGIN: the commit they came from, the export and its
-# version, and each file's sha256 (tests/test_boundary.py checks the copy against it). The profiles
-# are data; nothing of hpcworker is run here, and nothing is read from a checkout of it (the
-# interface standard, interface/README.md).
+# Refresh this folder from the export it pins, then write its ORIGIN: the repository, the commit the
+# files came from, the export and its version, and each file's sha256, sorted by path
+# (tests/test_boundary.py checks the copy against it). Which repository, export and version is the
+# import of interface/INTERFACE.json whose "into" is this folder, so the script cannot pin something
+# the manifest does not declare; every import folder holds this same script, byte for byte
+# (tests/test_boundary.py again), so a fix reaches each. What arrives is data: nothing of the
+# provider is run here, and nothing is read from a checkout of it (the interface standard,
+# interface/README.md).
 #
-#   bash profiles/pull.sh [--ref REF]   from GitHub through gh and the person's own sign-in (REF: main)
+#   bash <folder>/pull.sh [--ref REF]   from GitHub through gh and the person's own sign-in (REF: main)
 #
-# REF must be a commit hpcworker's default branch contains (a merged change, never a pull request's
-# branch), and only the files its interface/INTERFACE.json lists under the export at that commit are
-# taken, each to its path below the folder the export's paths share (framework/profiles/<id>.json
-# lands at <id>.json). A profile this copy has and the source no longer does is listed for a person
-# to remove in a reviewed commit; nothing is deleted.
+# REF must be a commit the provider's default branch contains (a merged change, never a pull
+# request's branch), and only the files the provider's interface/INTERFACE.json lists under the
+# export at that commit, at the version the import names, are taken, each to its path below the
+# folder the export's paths share (framework/profiles/<id>.json lands at <id>.json,
+# interface/contract/vectors/<name>.json at vectors/<name>.json). A file this copy has and the
+# export no longer does is listed for a person to remove in a reviewed commit; nothing is deleted.
 set -euo pipefail
-REPO=OpenSpineConsortium/hpcworker
-EXPORT=profiles WANT=1   # the export, and the version of it the engine reads (src/beethoven_agents/site.py)
 REF=main
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -25,22 +27,47 @@ done
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail() { echo "FAILED: $*" >&2; exit 1; }
 command -v gh >/dev/null || fail "gh is not installed"
-command -v python3 >/dev/null || fail "python3 is needed to read the export's paths"
-# The person's own sign-in, never a token from the environment.
-GH() { env -u GITHUB_TOKEN -u GH_TOKEN gh "$@"; }
+command -v python3 >/dev/null || fail "python3 is needed to read the manifests"
 
-sha=$(GH api "repos/$REPO/commits/$REF" --jq .sha) || fail "could not read $REPO at $REF (is gh signed in?)"
+# This folder's import, from the manifest of the repository it is in.
+MINE='
+import json, os, re, sys
+here = os.path.realpath(sys.argv[1])
+root = os.path.dirname(here)
+while not os.path.isfile(os.path.join(root, "interface", "INTERFACE.json")):
+    if os.path.dirname(root) == root:
+        sys.exit("no interface/INTERFACE.json above " + here)
+    root = os.path.dirname(root)
+with open(os.path.join(root, "interface", "INTERFACE.json"), encoding="utf-8") as fh:
+    imports = json.load(fh).get("imports", [])
+into = os.path.relpath(here, root)
+mine = [i for i in imports if os.path.realpath(os.path.join(root, str(i.get("into")))) == here]
+if len(mine) != 1:
+    sys.exit("interface/INTERFACE.json names no import into " + into)
+repo, export, version = mine[0].get("repository"), mine[0].get("export"), mine[0].get("version")
+if not (re.fullmatch(r"[A-Za-z0-9-]+/[A-Za-z0-9._-]+", str(repo))
+        and re.fullmatch(r"[a-z0-9-]+", str(export)) and type(version) is int):
+    sys.exit("the import into %s is not one this script can take" % into)
+print(repo, export, version, into)
+'
+mine=$(python3 -I -c "$MINE" "$HERE") || fail "this folder is not an import of interface/INTERFACE.json"
+read -r REPO EXPORT WANT INTO <<< "$mine"
+
+sha=$(gh api "repos/$REPO/commits/$REF" --jq .sha) || fail "could not read $REPO at $REF (is gh signed in?)"
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || fail "no commit for $REF"
-default=$(GH api "repos/$REPO" --jq .default_branch)
-case "$(GH api "repos/$REPO/compare/$default...$sha" --jq .status)" in
-  identical|behind) ;;
+default=$(gh api "repos/$REPO" --jq .default_branch) || fail "could not read $REPO"
+[[ "$default" =~ ^[A-Za-z0-9._/-]+$ ]] || fail "$REPO names no default branch"
+# identical or ahead: the default branch holds the commit (a merged change)
+case "$(gh api "repos/$REPO/compare/$sha...$default" --jq .status)" in
+  identical|ahead) ;;
   *) fail "$sha is not on $REPO's $default; take only what was merged there" ;;
 esac
-fetch() { GH api -H "Accept: application/vnd.github.raw+json" "repos/$REPO/contents/$1?ref=$sha"; }
+fetch() { gh api -H "Accept: application/vnd.github.raw+json" "repos/$REPO/contents/$1?ref=$sha"; }
 
 # The export's paths, as the provider's manifest at that commit lists them, decide what is taken:
 # "dir/" is every file under it, "*" matches within one part of a path. Each file lands at its
-# path below the folder all the export's paths share. One line per file: its path, a tab, where.
+# path below the folder all the export's paths share. One line per file, sorted by where it lands:
+# its path, a tab, where.
 PLAN='
 import json, re, sys
 export, want, manifest = sys.argv[1], int(sys.argv[2]), json.loads(sys.argv[3])
@@ -62,12 +89,12 @@ for level in zip(*[folder(p) for p in paths]):
     shared.append(level[0])
 base = "/".join(shared) + "/" if shared else ""
 rules = [pattern(p) for p in paths]
-for line in sys.stdin.read().splitlines():
-    if any(r.match(line) for r in rules):
-        print("%s\t%s" % (line, line[len(base):]))
+taken = [line for line in sys.stdin.read().splitlines() if any(r.match(line) for r in rules)]
+for line in sorted(taken, key=lambda line: line[len(base):]):
+    print("%s\t%s" % (line, line[len(base):]))
 '
 manifest=$(fetch interface/INTERFACE.json) || fail "$REPO has no interface/INTERFACE.json at $sha"
-plan=$(GH api "repos/$REPO/git/trees/$sha?recursive=1" --jq '.tree[] | select(.type == "blob") | .path' \
+plan=$(gh api "repos/$REPO/git/trees/$sha?recursive=1" --jq '.tree[] | select(.type == "blob") | .path' \
   | python3 -I -c "$PLAN" "$EXPORT" "$WANT" "$manifest") || fail "$REPO at $sha does not offer $EXPORT version $WANT"
 [ -n "$plan" ] || fail "no file in the export $EXPORT at $sha"
 
@@ -89,10 +116,10 @@ while IFS=$'\t' read -r src rel; do
 done <<< "$plan"
 printf '%s\n' "${origin[@]}" >"$HERE/ORIGIN.part"
 mv -f "$HERE/ORIGIN.part" "$HERE/ORIGIN"
-echo "profiles: ${#taken[@]} file(s) from $REPO at $sha"
+echo "$INTO: ${#taken[@]} file(s) of $EXPORT $WANT from $REPO at $sha"
 while IFS= read -r f; do
   rel="${f#"$HERE"/}"
   case "$rel" in ORIGIN|README.md|pull.sh) continue ;; esac
-  printf '%s\n' "${taken[@]}" | grep -qxF "$rel" && continue
-  echo "not in $REPO's export any more: profiles/$rel (remove it in a reviewed commit)"
-done < <(find "$HERE" -type f ! -name '*.part' | sort)
+  printf '%s\n' "${taken[@]}" | grep -qxF -- "$rel" && continue
+  echo "not in $REPO's export any more: $INTO/$rel (remove it in a reviewed commit)"
+done < <(find "$HERE" -type f ! -name '*.part' | LC_ALL=C sort)

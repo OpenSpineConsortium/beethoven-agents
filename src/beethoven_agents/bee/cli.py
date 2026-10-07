@@ -147,9 +147,10 @@ def _ensure_not_login_node() -> None:
         raise Refusal(why)
 
 
-# What says an agent, not a person, is asking: hpcworker's list (hpcw_agent_env in its
-# framework/lib/adapters/common.sh), with Claude Code's own markers and the VS Code edition's worker
-# among them. bee-grid.sh checks the same names on the host, where --cleanenv cannot hide them.
+# What says an agent, not a person, is asking: hpcworker's list (agent_markers in the pinned
+# contract/rules.json, which tests/bee/test_cli.py holds this to), with Claude Code's own markers
+# and the VS Code edition's worker among them. bee-grid.sh checks the same names on the host, where
+# --cleanenv cannot hide them.
 AGENT_MARKERS: tuple[str, ...] = (
     "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "BEETHOVEN_REQUEST_ID", "BEETHOVEN_WORKER",
     "ASHLEY_REQUEST_ID", "ASHLEY_WORKER", "ASHLEY_JOB", "HPCW_AGENT", "AI_AGENT",

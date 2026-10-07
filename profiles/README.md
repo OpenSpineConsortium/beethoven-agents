@@ -8,15 +8,16 @@ the lab that runs Beethoven on it. The engine reads them as data and imports not
 interface standard's rule 3 (`interface/README.md`).
 
 - `ORIGIN` names the hpcworker commit the files were read at (on hpcworker's `main`), the export and
-  its version, and each file's sha256. The copy now here was taken before hpcworker published its
-  manifest, so its record has no `export` line yet; the next pull writes one.
-  `tests/test_boundary.py` fails when a file differs from its record or the folder holds a file the
-  record does not list.
+  its version, and each file's sha256. `tests/test_boundary.py` fails when a file differs from its
+  record, the folder holds a file the record does not list, or the record names another export or
+  version than the import.
 - `bash profiles/pull.sh [--ref REF]` refreshes the files and the record from GitHub, through `gh`
   and the person's own sign-in, from a commit hpcworker's `main` contains, taking only the files
-  hpcworker's `interface/INTERFACE.json` lists under `profiles` at that commit. It never reads a
-  checkout of hpcworker and never deletes: a profile hpcworker no longer has is listed for a person
-  to remove in a reviewed commit. Never edit a profile here; change it in hpcworker and pull.
+  hpcworker's `interface/INTERFACE.json` lists under `profiles` at that commit. It is the same
+  script as every other import folder's (`interface/README.md`), and takes which export from this
+  repository's manifest. It never reads a checkout of hpcworker and never deletes: a profile
+  hpcworker no longer has is listed for a person to remove in a reviewed commit. Never edit a
+  profile here; change it in hpcworker (or its site module in beethoven-sites) and pull.
 - What reads them: `bee-grid.sh` and `containers/build.sh`, through `src/beethoven_agents/site.sh`,
   with `BEE_SITE=<id>` (otherwise they read the account's own `~/.hpcworker/profile.json`), and the
   site-literal lint in `tests/test_site.py`, which builds its list of forbidden values from them.

@@ -17,7 +17,28 @@
  "imports": [
   {
    "repository": "OpenSpineConsortium/beethoven-qa",
-   "export": "package",
+   "export": "python",
+   "version": 1,
+   "into": "vendor/beethoven-qa",
+   "origin": "vendor/beethoven-qa/ORIGIN"
+  },
+  {
+   "repository": "OpenSpineConsortium/beethoven-qa",
+   "export": "cli",
+   "version": 1,
+   "into": "vendor/beethoven-qa",
+   "origin": "vendor/beethoven-qa/ORIGIN"
+  },
+  {
+   "repository": "OpenSpineConsortium/beethoven-qa",
+   "export": "kit",
+   "version": 1,
+   "into": "vendor/beethoven-qa",
+   "origin": "vendor/beethoven-qa/ORIGIN"
+  },
+  {
+   "repository": "OpenSpineConsortium/beethoven-qa",
+   "export": "plugin",
    "version": 1,
    "into": "vendor/beethoven-qa",
    "origin": "vendor/beethoven-qa/ORIGIN"
@@ -28,6 +49,13 @@
    "version": 1,
    "into": "profiles",
    "origin": "profiles/ORIGIN"
+  },
+  {
+   "repository": "OpenSpineConsortium/hpcworker",
+   "export": "contract",
+   "version": 1,
+   "into": "contract",
+   "origin": "contract/ORIGIN"
   }
  ]
 }
