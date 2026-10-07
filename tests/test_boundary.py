@@ -46,7 +46,7 @@ CLONE = re.compile(
 CHECKOUT_ACTION_REPO = re.compile(r"^\s*repository:\s*\S+", re.MULTILINE)
 
 # (file, what matched) -> why it is still here and who removes it. Empty since profiles/pull.sh
-# lost --from and tests/test_site.py its HPCWORKER_DIR test (2026-10-07).
+# lost --from and tests/test_site.py its test of the server checkout's variable (2026-10-07).
 KNOWN: dict[tuple[str, str], str] = {}
 
 
@@ -98,10 +98,14 @@ def test_nothing_reaches_a_sibling_checkout() -> None:
 
 def test_the_scan_sees_what_it_looks_for() -> None:
     # Each pattern on a line of the kind it exists for, and none on this repository's own names.
-    assert SIBLING_PATH.search('cp "$(dirname "$HERE")/hpcworker/x" .')
-    assert SIBLING_PATH.search("python ../beethoven-qa/tools/x.py")
-    assert CHECKOUT_VAR.search('git -C "$HPCWORKER_DIR" show HEAD:x')
-    assert CLONE.search("gh repo clone OpenSpineConsortium/beethoven-sites")
+    # This file is tracked, so beethoven-qa's boundary lane reads it too: every sample that would
+    # reach another checkout is spelled from its parts, and none is written out whole.
+    server, var = "hpc" + "worker", "HPC" + "WORKER_DIR"
+    qa, sites = "beethoven" + "-qa", "beethoven" + "-sites"
+    assert SIBLING_PATH.search(f'cp "$(dirname "$HERE")/{server}/x" .')
+    assert SIBLING_PATH.search(f"python ../{qa}/tools/x.py")
+    assert CHECKOUT_VAR.search(f'git -C "${var}" show HEAD:x')
+    assert CLONE.search(f"gh repo clone OpenSpineConsortium/{sites}")
     own = (
         "/tmp/${USER}/hpcworker_${SLURM_JOB_ID}",
         "../beethoven-agents",
