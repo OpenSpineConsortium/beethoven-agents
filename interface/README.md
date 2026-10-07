@@ -33,7 +33,7 @@ when it builds its study image), and the guard and the managed settings baked in
 | From | Export | Version | Into | Record |
 | --- | --- | --- | --- | --- |
 | beethoven-qa | `python` | 1 | `vendor/beethoven-qa/` | `beethoven_qa.contracts` and `beethoven_qa.__version__`, nothing else of the package (the tests import `ViolationError` from the first) |
-| beethoven-qa | `cli` | 1 | `vendor/beethoven-qa/` | `python -m beethoven_qa gate`, `vendor-check` and `standards`, the pixi tasks of the same names |
+| beethoven-qa | `cli` | 2 | `vendor/beethoven-qa/` | `python -m beethoven_qa gate`, `vendor-check` and `standards`, the pixi tasks of the same names |
 | beethoven-qa | `kit` | 1 | `vendor/beethoven-qa/` | the five kit files, byte for byte (`.githooks/pre-push`, `.github/workflows/automerge.yml`, `rulesets.yml`, `standards.yml`, `.claude/hooks/session-start.sh`) |
 | beethoven-qa | `plugin` | 1 | `vendor/beethoven-qa/` | the Claude Code plugin the image registers as a `directory` marketplace |
 | hpcworker | `profiles` | 1 | `profiles/` | the composed site profiles, read as data by `site.py` and `site.sh` |
@@ -41,10 +41,11 @@ when it builds its study image), and the guard and the managed settings baked in
 
 The four beethoven-qa imports share one copy and one record, `vendor/beethoven-qa/ORIGIN`, in
 beethoven-qa's own form (repository, ref, commit, tree digest, file count), taken with its `vendor`
-command and checked by `pixi run --locked vendor-check`. The copy pinned today is beethoven-qa
-2.0.0, which carries beethoven-qa's own `interface/INTERFACE.json`: its `boundary` command, the
-gate's `boundary` lane, checks these four entries against that manifest, and this repository's
-tests leave the copy's files to `vendor-check`.
+command, which reads the release from GitHub through the person's own `gh` sign-in, and checked by
+`pixi run --locked vendor-check`. The copy pinned today is beethoven-qa 3.0.0 (`cli` at version 2,
+for `vendor`'s required `--ref`), which carries beethoven-qa's own `interface/INTERFACE.json`: its
+`boundary` command, the gate's `boundary` lane, checks these four entries against that manifest,
+and this repository's tests leave the copy's files to `vendor-check`.
 
 Each hpcworker import is a folder of its own holding the export's files, its `ORIGIN`
 (`repository`, `commit`, `export <id> <version>`, one `sha256` line per file, sorted by path), a
