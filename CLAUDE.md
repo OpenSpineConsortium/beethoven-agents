@@ -91,9 +91,11 @@ Anthropic product; "Claude" and "Claude Code" are Anthropic's marks, used here t
   `ASHLEY_REQUEST_ID`) or a similar agent marker is in the environment, or when stdin is not a
   terminal. This is the lesson of the 2026-09-28 `~/.ashley` deletion. The PreToolUse guard
   (`src/beethoven_agents/guard.py`, baked into the image and named by its managed settings,
-  Linear BEE-123/BEE-124) refuses it in the agent's shell and file tools, and the Z3 gate proves
-  the guard never lets a write into the sign-in directory through and never blocks on anything but
-  its listed triggers.
+  Linear BEE-123/BEE-124) refuses it in the agent's shell and file tools. The Z3 gate searches
+  `decide`'s promise that the guard never blocks on anything but its listed triggers; the promise
+  of `check_path` that no write into the sign-in directory gets through is checked by the tests
+  alone, because CrossHair completes no path of it (measured 2026-10-27, its entry under
+  `[tool.beethoven-qa.unproven]`).
 - **Grid etiquette.** Nothing container-related on the login node; container temp and cache on the
   compute node's local disk (`/tmp/$USER/...` with a cleanup trap — on Wayne State `$TMPDIR` is NOT
   node-local, it is CephFS, so never trust it blindly); IPC under `/dev/shm`; client-side scheduler
@@ -131,21 +133,28 @@ beethoven-qa owns it (its `CLAUDE.md` and the `definition-of-done` skill, pinned
 
 `python -m beethoven_qa gate` is steps 2 and 4 across `beethoven_agents` (the table
 `[tool.beethoven-qa]` in `pyproject.toml`): every public function carries contracts, and CrossHair
-proves them within 20 s per condition. `pixi run --locked gate` runs every lane, `vendor-check` among them;
-CI runs the same. `guard.py` takes its decorators straight from `icontract`, because the image runs
-it as one file before any package is bound; the gate recognises them either way. Step 5 lands in
-beethoven-qa.
+proves them within 20 s per condition. `pixi run --locked gate` runs every lane, `vendor-check`
+among them; CI runs the same. Since beethoven-qa 5.0.0 the gate prints every condition's verdict on
+every run, counts them, and fails on a precondition no input can meet; it refuses, in the package
+and the tests, every suppression comment (`# noqa`, `# type: ignore`, `# fmt: skip` and their kin),
+every skipped or expected-failing test and a `.pyi` stub, so what one of them hid is fixed at its
+cause. Since 9.0.0 a base narrows the proof (never the contract check) to the modules a change
+reaches: the pre-push hook passes `auto`, CI's gate lane on a pull request or a push the newest
+commit of `main` whose gate passed on a push, and a daily scheduled run of `ci.yml` proves every
+module, the backstop; since 10.0.0 `pyproject.toml` is read by its keys, so an `unproven` entry
+added proves nothing again. `guard.py` takes its decorators straight from `icontract`, because the
+image runs it as one file before any package is bound; the gate recognises them either way. Step 5
+lands in beethoven-qa.
 
 **The code standards** (beethoven-qa 2.0.0, its `docs/STANDARDS.md`; greg, 2026-10-04 23:26Z):
-beside the definition of done, which says whether code is correct, six groups hold this
-package's new code to limits that say whether a person can read it, change it and trust what
-built it: readability, design, duplication, coverage, security and supply chain.
-`pixi run --locked standards` runs them against where the branch left `main` (the gate runs it
-too); the kit's `standards.yml` runs one CI job per group, and `standards (every group green)` is
-a required check. Only what a change makes new or worse blocks; no setting, configuration file or
-suppression comment here loosens a limit, which changes only in a release of beethoven-qa. The
-`code-standards` skill (`vendor/beethoven-qa/plugin/skills/`) says how to write to them and how
-to answer a failure.
+beside the definition of done, which says whether code is correct, six groups hold this package's
+new code to limits that say whether a person can read it, change it and trust what built it:
+readability, design, duplication, coverage, security and supply chain. `pixi run --locked standards`
+runs them against where the branch left `main` (the gate runs it too); the kit's `standards.yml`
+runs each group as a step of one CI job, `standards (every group green)`, the required check. Only
+what a change makes new or worse blocks; no setting, configuration file or suppression comment here
+loosens a limit, which changes only in a release of beethoven-qa. The `code-standards` skill
+(`vendor/beethoven-qa/plugin/skills/`) says how to write to them and how to answer a failure.
 
 ## Token economy — always on, every run (Goal 3 / Goal 5 orchestration half)
 
@@ -328,20 +337,25 @@ pixi run --locked gate    # lint + typecheck + tests + symbolic (beethoven-qa's 
 pixi run --locked symbolic  # just the CrossHair/Z3 gate: python -m beethoven_qa gate
 pixi run --locked standards  # the code standards, every group, against where this branch left main
 pixi run --locked vendor-check  # the pinned copy still matches its ORIGIN, the kit files equal the copy's
+pixi run --locked report    # the evidence report into ./report (never committed)
+BEETHOVEN_QA_BASE=auto pixi run --locked symbolic  # only what the change since main reaches
 ```
 
 The pinned copy and the five kit files (`.githooks/pre-push`, `.github/workflows/automerge.yml`,
-`.github/workflows/rulesets.yml`, `.claude/hooks/session-start.sh`,
+`.github/workflows/rulesets.yml`, `.claude/hooks/beethoven-qa-session-start.sh`,
 `.github/workflows/standards.yml`) are never edited here; a change
 is made in beethoven-qa, released, and taken with its `vendor` command, which from 3.0.0 reads
 the release from GitHub through your own `gh` sign-in and runs from the copy itself: `pixi run
 --locked python -m beethoven_qa vendor --into . --ref <tag> --kit` (beethoven-qa
 `docs/CONSUMING.md`, "Updating to a new release").
 
-A Claude Code cloud session gets the same environment from `.claude/hooks/session-start.sh`
-(installs pixi 0.81.0 and runs `pixi install --locked`; cloud sessions only, idempotent). That hook
-runs in a session with one repository; a project thread with several repositories does not read it
-and needs the same commands as the environment's setup script.
+A Claude Code cloud session gets the same environment from
+`.claude/hooks/beethoven-qa-session-start.sh` (installs pixi 0.81.0, checked against its digest,
+and runs `pixi install --locked`; cloud sessions only, idempotent). That hook runs in a session
+with one repository; a project thread with several repositories does not read it and needs the same
+commands as the environment's setup script. `.claude/settings.json` also runs the copy's coaching
+hook (`vendor/beethoven-qa/plugin/hooks/coach.sh`, beethoven-qa 4.0.0) after every edit: it says
+beside the edit what the code standards would block in CI, and never stops one.
 
 **The gate runs before every push** (greg, 2026-10-04): `.githooks/pre-push` runs
 `pixi run --locked gate` and a red gate does not leave the machine; `pixi run hooks` (or the
@@ -352,17 +366,22 @@ hook before the gate runs. `SKIP_GATE=1` skips all of it knowingly, and
 the commit says why. On GitHub the same gate is the required check on `main`: the rule lives in
 `.github/rulesets/main.json` (deletion and force-push blocked; the `gate` and `image` lanes and
 `standards (every group green)` must be green, by their exact job names; organization admins
-bypass) and is imported into the repository's rulesets, so whether a pull request lands is decided
+bypass; the policy strict, so a pull request whose branch fell behind `main` waits until it carries
+`main`, which its own session brings in: merge `main`, gate, push) and is imported into the
+repository's rulesets, so whether a pull request lands is decided
 by the tests, with no review step and no human click once auto-merge is armed on it. Pull requests are opened ready for review, never as drafts.
 
 The functions the gate never checks as targets are listed, each with its reason, under
 `[tool.beethoven-qa.unproven]` in `pyproject.toml` (bee's readers, writers, clock and process
-starters, and one function CrossHair 0.0.111 cannot run); the gate prints the list on every run.
-Listing keeps a function from being a target and nothing more: CrossHair runs its body when it
-proves a contracted caller and assumes its contracts there, so every contracted function that
-calls a listed one is listed too (checked 2026-10-04 over the package's imports and calls), and a
-listed function's contracts are checked by the tests alone. A new entry is a person's decision in
-a reviewed change, never a way to get green; a `# crosshair:` comment fails the gate.
+starters, and five pure functions CrossHair cannot run: `claudeignore.ignored_by`, the two hand-off
+prompts, `accounts.host_transcript` and `guard.check_path`, each with what was measured); the gate
+prints the list on every run. Listing keeps a function from being a target and nothing more:
+CrossHair runs its body when it proves a contracted caller and assumes its contracts there, so
+every contracted function that calls a listed reader, writer or process starter is listed too
+(checked 2026-10-04 over the package's imports and calls), while the callers of a pure listed
+function, `guard.decide` among them, stay targets; a listed function's contracts are checked by
+the tests alone. A new entry is a person's decision in a reviewed change, never a way to get green;
+a `# crosshair:` comment fails the gate.
 
 Anything that runs a container, a scheduler call or Claude Code runs on the grid inside a Slurm job,
 never on the login node and never on a laptop. The Apptainer image (`containers/claude-verify.def`)

@@ -70,7 +70,7 @@ per_condition_timeout = 20
 "beethoven_agents.bee.accounts.run_login" = "starts claude auth login at the person's own terminal"
 "beethoven_agents.bee.accounts.prepare_account_dir" = "makes the account's directory, and for main a link"
 "beethoven_agents.bee.accounts.now" = "reads the clock"
-"beethoven_agents.bee.claudeignore.ignored_by" = "logic CrossHair cannot run: each rule carries its regular expression as data, and CrossHair 0.0.111 stops with CrossHairInternal ('Numeric operation on symbolic while not tracing', measured 2026-10-04); tests/bee/test_claudeignore.py samples it"
+"beethoven_agents.bee.claudeignore.ignored_by" = "logic CrossHair cannot run: each rule carries its regular expression as data, and CrossHair 0.0.111 stops with CrossHairInternal ('Numeric operation on symbolic while not tracing', measured 2026-10-04), and 0.0.112 the same (measured 2026-10-27); tests/bee/test_claudeignore.py samples it"
 "beethoven_agents.bee.claudeignore.decide" = "reads the working directory and resolves links on disk"
 "beethoven_agents.bee.claudeignore.main" = "the hook: reads the event, prints the decision"
 "beethoven_agents.bee.handoff.state_dir" = "reads the environment and the working directory"
@@ -82,3 +82,12 @@ per_condition_timeout = 20
 "beethoven_agents.bee.handoff.write_record" = "writes a state record"
 "beethoven_agents.bee.handoff.main" = "the hooks: read the event, write the state, print what Claude Code reads"
 "beethoven_agents.bee.cli.main" = "the command line: reads and writes the account list, starts Claude Code"
+# Four pure functions CrossHair measurably cannot run, listed for that fault and not for I/O, so
+# their callers (guard.decide among them) stay targets and CrossHair runs these bodies there. The
+# 5.0.0 gate is the first to start CrossHair with --report_all; the 3.0.0 gate passed each of them
+# in silence. Measured 2026-10-27 at the full 20 s bound under CrossHair 0.0.111 and 0.0.112 alike:
+# each target ends "Unable to meet precondition", no path completed, no counterexample.
+"beethoven_agents.bee.handoff.extraction_prompt" = "logic CrossHair cannot run: the result holds some 1.9 KB of fixed text around the symbolic path and the postcondition searches it, and CrossHair 0.0.111 and 0.0.112 complete no path within the bound (measured 2026-10-27: the same shape with 1,000 fixed characters completes none, with 10 it does), so the gate reports the precondition unmet; tests/bee/test_handoff.py checks the contracts"
+"beethoven_agents.bee.handoff.hydration_prompt" = "logic CrossHair cannot run: the result holds some 1.4 KB of fixed text around three symbolic paths and the postcondition searches it, and CrossHair 0.0.111 and 0.0.112 complete no path within the bound (measured 2026-10-27, as for extraction_prompt), so the gate reports the precondition unmet; tests/bee/test_handoff.py checks the contracts"
+"beethoven_agents.bee.accounts.host_transcript" = "logic CrossHair cannot run: CrossHair 0.0.111 and 0.0.112 build no input that meets its three preconditions together (under /claude/, no parent step, an absolute host directory) within the bound, 57 tries and none completed (measured 2026-10-27), so the gate reports the precondition unmet; tests/bee/test_accounts.py checks the contracts"
+"beethoven_agents.guard.check_path" = "logic CrossHair cannot run: its postconditions normalise symbolic paths with os.path.normpath, and with its three absolute-path preconditions CrossHair 0.0.111 and 0.0.112 complete no path within the bound, 1565 tries stopped at the third precondition (measured 2026-10-27; the preconditions alone are confirmed, a normpath postcondition over two symbolic paths is not), so the gate reports the precondition unmet; tests/test_guard.py checks the contracts and guard.decide, its caller, stays a target"
