@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -186,8 +187,9 @@ def test_prompts_carry_the_schema_and_the_validation_step() -> None:
     assert hyd.index("Filesystem validation") < hyd.index("**Execute**")
 
 
-def gate(**over: object) -> tuple[str, str]:
-    base: dict[str, object] = dict(
+def gate(**over: Any) -> tuple[str, str]:
+    # Any: each value goes to a parameter of its own type, which one dict type cannot spell.
+    base: dict[str, Any] = dict(
         gate_on=True,
         stop_hook_active=False,
         head="h2",
@@ -200,7 +202,7 @@ def gate(**over: object) -> tuple[str, str]:
         extract_path="/s/EXTRACT.md",
     )
     base.update(over)
-    return h.gate_feedback(**base)  # type: ignore[arg-type]
+    return h.gate_feedback(**base)
 
 
 def test_stop_gate() -> None:
@@ -224,7 +226,7 @@ def test_status_line() -> None:
 
 
 def test_status_line_survives_odd_numbers(tmp_path: Path) -> None:
-    # CrossHair: a percentage too long to print within the bound broke the one short line.
+    # Found by CrossHair: a percentage too long to print within the bound broke the one short line.
     env = {"NO_COLOR": "1", "BEETHOVEN_STATE_DIR": str(tmp_path / "s"), "BEE_THRESHOLD": "500"}
     payload: dict[str, object] = {
         "rate_limits": {
@@ -253,15 +255,24 @@ def env(project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(project))
     monkeypatch.setenv("BEE_ACCOUNT", "second")
     monkeypatch.setenv("BEE_REGISTRY_DIR", str(tmp_path / "registry"))
-    for name in ("BEETHOVEN_STATE_DIR", "BEETHOVEN_RUN_ROOT", "BEETHOVEN_HANDOFF",
-                 "BEETHOVEN_HANDOFF_GATE", "NO_COLOR"):  # fmt: skip
+    for name in (
+        "BEETHOVEN_STATE_DIR",
+        "BEETHOVEN_RUN_ROOT",
+        "BEETHOVEN_HANDOFF",
+        "BEETHOVEN_HANDOFF_GATE",
+        "NO_COLOR",
+    ):
         monkeypatch.delenv(name, raising=False)
     return project / ".claude" / "state"
 
 
 def test_session_start_records_and_injects(env: Path, project: Path) -> None:
-    payload = {"session_id": "s1", "transcript_path": "/claude/projects/-work/s1.jsonl",
-               "source": "startup", "cwd": str(project)}  # fmt: skip
+    payload = {
+        "session_id": "s1",
+        "transcript_path": "/claude/projects/-work/s1.jsonl",
+        "source": "startup",
+        "cwd": str(project),
+    }
     out = json.loads(run_hook("session-start", payload))
     note = out["hookSpecificOutput"]["additionalContext"]
     assert "claude_context.md" in note and "PROJECT STATE" not in note
@@ -332,9 +343,12 @@ def test_stop_gate_asks_at_the_threshold(
     run_hook("stop", {"session_id": "s1"})  # record the file against this commit
     line = run_hook(
         "statusline",
-        {"session_id": "s1", "workspace": {"project_dir": str(project)},
-         "rate_limits": {"five_hour": {"used_percentage": 93.4, "resets_at": 1_800_000_000}}},
-    )  # fmt: skip
+        {
+            "session_id": "s1",
+            "workspace": {"project_dir": str(project)},
+            "rate_limits": {"five_hour": {"used_percentage": 93.4, "resets_at": 1_800_000_000}},
+        },
+    )
     assert "5h 93%" in line
     out = json.loads(run_hook("stop", {"session_id": "s1"}))
     assert "93%" in out["hookSpecificOutput"]["additionalContext"]
@@ -344,18 +358,27 @@ def test_stop_gate_asks_at_the_threshold(
 def test_usage_limit_is_recorded(env: Path, project: Path, tmp_path: Path) -> None:
     run_hook(
         "statusline",
-        {"session_id": "s1", "cwd": str(project),
-         "rate_limits": {"five_hour": {"used_percentage": 100, "resets_at": 1_900_000_000},
-                         "seven_day": {"used_percentage": 50, "resets_at": 1_900_500_000}},
-         "context_window": {"used_percentage": 12}},
-    )  # fmt: skip
+        {
+            "session_id": "s1",
+            "cwd": str(project),
+            "rate_limits": {
+                "five_hour": {"used_percentage": 100, "resets_at": 1_900_000_000},
+                "seven_day": {"used_percentage": 50, "resets_at": 1_900_500_000},
+            },
+            "context_window": {"used_percentage": 12},
+        },
+    )
     usage = json.loads((tmp_path / "registry" / "usage" / "second.json").read_text())
     assert usage["five_hour_pct"] == 100 and usage["seven_day_resets_at"] == 1_900_500_000
     out = run_hook(
         "stop-failure",
-        {"session_id": "s1", "error": "rate_limit", "transcript_path": "/t/s1.jsonl",
-         "error_details": "429 Too Many Requests"},
-    )  # fmt: skip
+        {
+            "session_id": "s1",
+            "error": "rate_limit",
+            "transcript_path": "/t/s1.jsonl",
+            "error_details": "429 Too Many Requests",
+        },
+    )
     assert json.loads(out)["terminalSequence"].startswith("\033]9;Beethoven:")
     limit = json.loads((env / "limit.json").read_text())
     assert limit["account"] == "second" and limit["five_hour_resets_at"] == 1_900_000_000
@@ -418,7 +441,7 @@ def test_a_limit_keeps_only_its_own_sessions_reading(env: Path, project: Path) -
                 "seven_day_pct": 100,
                 "seven_day_resets_at": 1_900_500_000,
             }
-        )  # fmt: skip
+        )
     )
     run_hook("stop-failure", {"session_id": "s1", "error": "rate_limit"})
     limit = json.loads((env / "limit.json").read_text())
@@ -473,8 +496,11 @@ def test_the_status_line_survives_a_failed_record(
     monkeypatch.setenv("NO_COLOR", "1")
     line = run_hook(
         "statusline",
-        {"session_id": "s1", "cwd": str(project),
-         "rate_limits": {"five_hour": {"used_percentage": 40, "resets_at": 1_900_000_000}}},
-    )  # fmt: skip
+        {
+            "session_id": "s1",
+            "cwd": str(project),
+            "rate_limits": {"five_hour": {"used_percentage": 40, "resets_at": 1_900_000_000}},
+        },
+    )
     assert line.startswith("bee:second · 5h 40%")
     assert "statusline" in (env / "hook-errors.log").read_text()

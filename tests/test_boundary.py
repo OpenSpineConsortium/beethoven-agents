@@ -26,11 +26,21 @@ SELF = Path(__file__).resolve().relative_to(REPO).as_posix()
 # every other repository of the ecosystem, the names their checkouts had (the Desktop folders
 # ashley and ashley-bridge), and the website's
 OTHERS = (
-    "beethoven", "beethoven-extension", "beethoven-desktop", "beethoven-qa", "beethoven-research",
-    "beethoven-sites", "beethoven-base", "beethoven-vscode", "hpcworker", "ashley",
-    "ashley-bridge", "openspineconsortium.github.io", "spinesurg-ct-nnunet",
+    "beethoven",
+    "beethoven-extension",
+    "beethoven-desktop",
+    "beethoven-qa",
+    "beethoven-research",
+    "beethoven-sites",
+    "beethoven-base",
+    "beethoven-vscode",
+    "hpcworker",
+    "ashley",
+    "ashley-bridge",
+    "openspineconsortium.github.io",
+    "spinesurg-ct-nnunet",
     "u251-xenograft-rat-rnaseq-study",
-)  # fmt: skip
+)
 _NAMES = "|".join(re.escape(n) for n in sorted(OTHERS, key=len, reverse=True))
 # a path made from this checkout's parent: "../<repo>", or "$(dirname ...)/<repo>" and the like
 SIBLING_PATH = re.compile(rf"(?:\.\./|\)/|\}}/)({_NAMES})(?![A-Za-z0-9_.-])")
@@ -291,8 +301,12 @@ def test_pull_takes_only_the_export_at_a_merged_commit(tmp_path: Path) -> None:
 
 def test_pull_lands_a_folder_export_below_its_folder_sorted(tmp_path: Path) -> None:
     pull = Pull(tmp_path, "contract")
-    for path in ("interface/contract/vectors/b.json", "interface/contract/vectors/a.json",
-                 "interface/contract/rules.json", "interface/contract/cli.json"):  # fmt: skip
+    for path in (
+        "interface/contract/vectors/b.json",
+        "interface/contract/vectors/a.json",
+        "interface/contract/rules.json",
+        "interface/contract/cli.json",
+    ):
         pull.provide(path, json.dumps({"from": path}).encode())
     pull.provide("interface/testbed/fakebin/sbatch", b"#!/bin/sh\n")
     pull.offer("contract", 1, ["interface/contract/"])

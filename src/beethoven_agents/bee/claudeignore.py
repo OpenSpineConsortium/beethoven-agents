@@ -302,7 +302,7 @@ def main(stdin: _TextStream, stdout: _TextStream, stderr: _TextStream) -> int:
         if not isinstance(payload, dict):
             raise ValueError("not an object")
         reason = decide(payload)
-    except Exception as exc:  # noqa: BLE001 - fail open, loudly: the deny rules still hold secrets
+    except Exception as exc:  # fail open, loudly: the deny rules still hold secrets
         stderr.write(
             f"claudeignore: could not judge the call ({exc.__class__.__name__}); allowed\n"
         )

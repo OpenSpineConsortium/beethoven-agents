@@ -58,42 +58,106 @@ __all__ = [
 
 # Every variable that would put a step on something other than the student's own subscription: a
 # key or token that outranks the sign-in, an endpoint, a cloud provider's switch. A command that
-# names one is refused, whether it sets, prints or unsets it. The same names as bee's
-# CREDENTIAL_VARS (bee/accounts.py; tests/test_guard.py keeps the two equal), typed again because
-# the image runs this file alone, before the package is bound.
+# names one is refused, whether it sets, prints or unsets it. bee strips the same names from every
+# child it starts and takes this very list for it (bee/accounts.py imports it): the image runs this
+# file alone, before the package is bound, so this is the file that must hold it.
 CREDENTIAL_VARS: tuple[str, ...] = (
-    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE",
-    "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_WORKSPACE_ID",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_PROFILE",
+    "ANTHROPIC_ORGANIZATION_ID",
+    "ANTHROPIC_FEDERATION_RULE_ID",
+    "ANTHROPIC_WORKSPACE_ID",
     "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_AWS_API_KEY", "ANTHROPIC_AWS_BASE_URL", "ANTHROPIC_AWS_WORKSPACE_ID",
-    "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
-    "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_BEDROCK_SERVICE_TIER",
-    "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID",
-    "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL",
+    "ANTHROPIC_AWS_API_KEY",
+    "ANTHROPIC_AWS_BASE_URL",
+    "ANTHROPIC_AWS_WORKSPACE_ID",
+    "ANTHROPIC_BEDROCK_BASE_URL",
+    "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
+    "ANTHROPIC_BEDROCK_REGION_PREFIX",
+    "ANTHROPIC_BEDROCK_SERVICE_TIER",
+    "ANTHROPIC_VERTEX_BASE_URL",
+    "ANTHROPIC_VERTEX_PROJECT_ID",
+    "ANTHROPIC_FOUNDRY_API_KEY",
+    "ANTHROPIC_FOUNDRY_AUTH_TOKEN",
+    "ANTHROPIC_FOUNDRY_BASE_URL",
     "ANTHROPIC_FOUNDRY_RESOURCE",
-    "AWS_BEARER_TOKEN_BEDROCK", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
-    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS",
-    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY",
-    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
+    "CLAUDE_CODE_USE_MANTLE",
+    "CLAUDE_CODE_USE_GATEWAY",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_OAUTH_SCOPES",
     "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
-)  # fmt: skip
+)
 
 # Every refusal in check_command rests on one of these, as a whole word in the normalized command
 # (a token with no word characters, like the fork bomb's, is matched as plain text). The gate
 # proves it (`python -m beethoven_qa gate`) and the tests sample it, rule by rule.
 TRIGGER_TOKENS: tuple[str, ...] = (
-    "rm", "find", "shred", "xargs", "git",
-    "sudo", "su", "doas", "chroot", "mount", "umount", "dd", "fdisk", "parted", "mkfs",
-    "shutdown", "reboot", "systemctl", "modprobe", "insmod", "sysctl", "dev",
-    "chmod", "chown", "chgrp",
-    "nohup", "setsid", "disown", "at", "crontab", "pkill", "killall", "kill", ":()",
-    "ssh", "scp", "sftp", "nc", "ncat", "telnet", "socat", "rsync", "curl", "wget",
-    "sacctmgr", "scontrol", "scancel", "sbatch", "array",
-    "setup", "logout", "login", "purge",
+    "rm",
+    "find",
+    "shred",
+    "xargs",
+    "git",
+    "sudo",
+    "su",
+    "doas",
+    "chroot",
+    "mount",
+    "umount",
+    "dd",
+    "fdisk",
+    "parted",
+    "mkfs",
+    "shutdown",
+    "reboot",
+    "systemctl",
+    "modprobe",
+    "insmod",
+    "sysctl",
+    "dev",
+    "chmod",
+    "chown",
+    "chgrp",
+    "nohup",
+    "setsid",
+    "disown",
+    "at",
+    "crontab",
+    "pkill",
+    "killall",
+    "kill",
+    ":()",
+    "ssh",
+    "scp",
+    "sftp",
+    "nc",
+    "ncat",
+    "telnet",
+    "socat",
+    "rsync",
+    "curl",
+    "wget",
+    "sacctmgr",
+    "scontrol",
+    "scancel",
+    "sbatch",
+    "array",
+    "setup",
+    "logout",
+    "login",
+    "purge",
     *CREDENTIAL_VARS,
-    "credentials", "CLAUDE_CONFIG_DIR",
-)  # fmt: skip
+    "credentials",
+    "CLAUDE_CONFIG_DIR",
+)
 
 # Job arrays larger than this need the orchestrator's own fan-out, which is paced against the
 # student's quota window (CLAUDE.md, token economy), not a one-line sbatch from inside a step.
@@ -494,7 +558,7 @@ def main(stdin: _TextStream, stdout: _TextStream, stderr: _TextStream) -> int:
         if not isinstance(payload, dict):
             raise ValueError("not an object")
         verdict = decide(payload)
-    except Exception as exc:  # noqa: BLE001 - fail closed: an unjudged call never goes through
+    except Exception as exc:  # fail closed: an unjudged call never goes through
         stderr.write(
             f"beethoven guard: could not judge the call ({exc.__class__.__name__}); blocked\n"
         )

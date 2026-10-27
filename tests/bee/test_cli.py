@@ -165,19 +165,40 @@ def test_fork_resumes_the_recorded_transcript(home: Path, project: Path, tmp_pat
 @pytest.mark.parametrize(
     ("record", "why"),
     [
-        ({"session_id": "s1", "account": "a", "transcript_path": "/claude/.credentials.json"},
-         "not a session file"),
-        ({"session_id": "s1", "account": "a",
-          "transcript_path": "/claude/projects/-work/../../.credentials.json"},
-         "not a session file"),
-        ({"session_id": "s2", "account": "a", "transcript_path": "/claude/projects/-work/s1.jsonl"},
-         "not a session file"),
-        ({"session_id": "s1", "account": "zz", "transcript_path": "/claude/projects/w/s1.jsonl"},
-         "none of your accounts"),
-        ({"session_id": "../s1", "account": "a", "transcript_path": "/claude/projects/x/s1.jsonl"},
-         "none of your accounts"),
+        (
+            {"session_id": "s1", "account": "a", "transcript_path": "/claude/.credentials.json"},
+            "not a session file",
+        ),
+        (
+            {
+                "session_id": "s1",
+                "account": "a",
+                "transcript_path": "/claude/projects/-work/../../.credentials.json",
+            },
+            "not a session file",
+        ),
+        (
+            {
+                "session_id": "s2",
+                "account": "a",
+                "transcript_path": "/claude/projects/-work/s1.jsonl",
+            },
+            "not a session file",
+        ),
+        (
+            {"session_id": "s1", "account": "zz", "transcript_path": "/claude/projects/w/s1.jsonl"},
+            "none of your accounts",
+        ),
+        (
+            {
+                "session_id": "../s1",
+                "account": "a",
+                "transcript_path": "/claude/projects/x/s1.jsonl",
+            },
+            "none of your accounts",
+        ),
     ],
-)  # fmt: skip
+)
 def test_fork_believes_only_the_writing_accounts_session_file(
     home: Path,
     project: Path,
@@ -351,8 +372,14 @@ def test_init_merges_into_existing_settings(home: Path, project: Path) -> None:
     assert data["hooks"]["Stop"][0]["hooks"] == [mine]
     commands = [g["hooks"][0]["command"] for e in data["hooks"].values() for g in e]
     hook = f'bash "{REPO}/src/beethoven_agents/bee/hook.sh"'
-    for name in ("session-start", "post-tool-use", "pre-compact", "stop", "stop-failure",
-                 "claudeignore"):  # fmt: skip
+    for name in (
+        "session-start",
+        "post-tool-use",
+        "pre-compact",
+        "stop",
+        "stop-failure",
+        "claudeignore",
+    ):
         assert f"{hook} {name}" in commands
     assert data["hooks"]["PostToolUse"][0]["hooks"][0]["async"] is True
     assert data["statusLine"]["command"] == f"{hook} statusline"
@@ -370,8 +397,11 @@ def test_init_merges_into_existing_settings(home: Path, project: Path) -> None:
 def test_init_denies_the_sign_in_files_where_they_are(home: Path, project: Path) -> None:
     assert bee("init", "--project", str(project), "--engine", str(REPO)) == 0
     deny = json.loads((project / ".claude" / "settings.local.json").read_text())["permissions"]
-    assert {"Read(//**/.credentials.json)", "Read(~/.claude/.credentials.json)",
-            "Read(~/.beethoven/**/.credentials.json)"} <= set(deny["deny"])  # fmt: skip
+    assert {
+        "Read(//**/.credentials.json)",
+        "Read(~/.claude/.credentials.json)",
+        "Read(~/.beethoven/**/.credentials.json)",
+    } <= set(deny["deny"])
 
 
 def test_init_takes_back_a_rule_gone_from_claudeignore(home: Path, project: Path) -> None:
@@ -428,8 +458,11 @@ def test_an_old_limit_record_rests_from_the_hit_not_from_now(
     three(home)
     sdir = handoff.state_dir(str(project))
     day_ago = acc.utc_text(NOW - 86400)
-    handoff.write_record(sdir, handoff.LIMIT_FILE, {"account": "a", "at": day_ago,
-                         "five_hour_resets_at": NOW - 80000})  # fmt: skip
+    handoff.write_record(
+        sdir,
+        handoff.LIMIT_FILE,
+        {"account": "a", "at": day_ago, "five_hour_resets_at": NOW - 80000},
+    )
     capsys.readouterr()
     assert bee("plan", "run", "--project", str(project)) == 0
     assert capsys.readouterr().out.split("\t")[0] == "a"  # its window reset long ago
@@ -448,7 +481,7 @@ def test_a_limit_with_the_five_hour_window_far_off_is_the_week(home: Path, proje
             "five_hour_resets_at": NOW + 7200,
             "seven_day_pct": 99,
             "seven_day_resets_at": NOW + 3 * 86400,
-        },  # fmt: skip
+        },
     )
     assert bee("plan", "continue", "--project", str(project)) == 0
     rest = {a.label: a.hibernate_until for a in acc.load_accounts(acc.registry_dir())}["a"]

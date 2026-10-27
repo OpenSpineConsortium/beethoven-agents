@@ -216,7 +216,7 @@ MORE_CASES: list[tuple[dict[str, object], str]] = [
     ({"loggedIn": False, "authMethod": "claude.ai", "apiKeySource": "x"}, "none"),
     ({"loggedIn": "true", "authMethod": "claude.ai"}, "none"),
     ({}, "none"),
-]  # fmt: skip
+]
 
 
 @pytest.mark.parametrize(("payload", "verdict"), MORE_CASES)

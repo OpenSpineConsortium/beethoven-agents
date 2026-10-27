@@ -101,8 +101,9 @@ class SiteProfile(BaseModel):
     node_tmp_var: StrictStr = ""
     tmpdir_is_node_local: StrictBool = False
 
-    @field_validator("runtime", "runtime_module", "containers_dir", "node_tmp", "node_tmp_var",
-                     mode="before")  # fmt: skip
+    @field_validator(
+        "runtime", "runtime_module", "containers_dir", "node_tmp", "node_tmp_var", mode="before"
+    )
     @classmethod
     def _null_text(cls, value: object) -> object:
         return _none_is_empty(value)
@@ -112,8 +113,9 @@ class SiteProfile(BaseModel):
     def _null_flag(cls, value: object) -> object:
         return False if value is None else value
 
-    @field_validator("site", "runtime", "runtime_module", "containers_dir", "node_tmp",
-                     "node_tmp_var")  # fmt: skip
+    @field_validator(
+        "site", "runtime", "runtime_module", "containers_dir", "node_tmp", "node_tmp_var"
+    )
     @classmethod
     def _one_line(cls, value: str) -> str:
         if not _plain(value):
@@ -144,16 +146,21 @@ def expand(
     scheduler's name, and ``$SLURM_TMPDIR``, ``$L_SCRATCH`` and ``$TMPDIR`` when they are set.
     Each may be written ``$NAME`` or ``${NAME}``; anything else is left as written."""
     pairs = [("USER", user), ("HOME", home)] + [(v, job) for v in JOB_VARS]
-    pairs += [(n, v) for n, v in (("SLURM_TMPDIR", slurm_tmpdir), ("L_SCRATCH", l_scratch),
-                                  ("TMPDIR", tmpdir)) if v]  # fmt: skip
+    pairs += [
+        (n, v)
+        for n, v in (("SLURM_TMPDIR", slurm_tmpdir), ("L_SCRATCH", l_scratch), ("TMPDIR", tmpdir))
+        if v
+    ]
     for name, value in pairs:
         text = text.replace("${" + name + "}", value).replace("$" + name, value)
     return text
 
 
 @beartype
-@ensure(lambda result, containers_dir: not containers_dir or result == containers_dir,
-        "the profile's own image folder wins")  # fmt: skip
+@ensure(
+    lambda result, containers_dir: not containers_dir or result == containers_dir,
+    "the profile's own image folder wins",
+)
 @ensure(
     lambda result, containers_dir, image_store_path: (
         bool(containers_dir) or image_store_path.startswith(result)
@@ -197,8 +204,10 @@ def engine_image(directory: str) -> str:
 @beartype
 @ensure(lambda result: result in RUNTIMES or result == "", "a runtime bee can drive, or none")
 @ensure(lambda result, runtime: runtime not in RUNTIMES or result == runtime, "a known one is kept")
-@ensure(lambda result, runtime: runtime != "" or result == "apptainer",
-        "a profile that names none means Apptainer, as before")  # fmt: skip
+@ensure(
+    lambda result, runtime: runtime != "" or result == "apptainer",
+    "a profile that names none means Apptainer, as before",
+)
 def runtime_command(runtime: str) -> str:
     """The command bee runs containers with: the profile's runtime when it is one of
     :data:`RUNTIMES`, Apptainer when the profile names none, and empty (refused) for a runtime

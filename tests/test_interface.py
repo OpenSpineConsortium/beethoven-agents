@@ -150,15 +150,23 @@ def test_usage_schema_holds_what_the_status_line_writes(tmp_path: Path) -> None:
     from beethoven_agents.bee import handoff
 
     schema = json.loads(USAGE_SCHEMA.read_text(encoding="utf-8"))
-    env = {"BEE_ACCOUNT": "a", "BEE_REGISTRY_DIR": str(tmp_path / "registry"), "NO_COLOR": "1",
-           "BEETHOVEN_STATE_DIR": str(tmp_path / "state")}  # fmt: skip
+    env = {
+        "BEE_ACCOUNT": "a",
+        "BEE_REGISTRY_DIR": str(tmp_path / "registry"),
+        "NO_COLOR": "1",
+        "BEETHOVEN_STATE_DIR": str(tmp_path / "state"),
+    }
     windows: list[dict[str, object]] = [
-        {"five_hour": {"used_percentage": 93.4, "resets_at": 1_800_000_000},
-         "seven_day": {"used_percentage": 50, "resets_at": 1_900_000_000}},
+        {
+            "five_hour": {"used_percentage": 93.4, "resets_at": 1_800_000_000},
+            "seven_day": {"used_percentage": 50, "resets_at": 1_900_000_000},
+        },
         {"five_hour": {"used_percentage": 12, "resets_at": 1_800_000_000}},
-        {"five_hour": {"used_percentage": 1e300, "resets_at": 10**30},
-         "seven_day": {"used_percentage": "nan"}},
-    ]  # fmt: skip
+        {
+            "five_hour": {"used_percentage": 1e300, "resets_at": 10**30},
+            "seven_day": {"used_percentage": "nan"},
+        },
+    ]
     for n, limits in enumerate(windows):
         payload = {
             "rate_limits": limits,

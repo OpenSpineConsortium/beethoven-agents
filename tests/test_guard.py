@@ -204,9 +204,9 @@ def test_every_credential_variable_is_refused(name: str) -> None:
 
 
 def test_guard_refuses_what_bee_strips() -> None:
-    # The image runs guard.py alone, so it types the list again; the two never drift apart, and
-    # both hold hpcworker's (the pinned contract's rules.json, credential_variables).
-    assert CREDENTIAL_VARS == accounts.CREDENTIAL_VARS
+    # The image runs guard.py alone, so the guard holds the list and bee takes that very tuple,
+    # which holds hpcworker's (the pinned contract's rules.json, credential_variables).
+    assert accounts.CREDENTIAL_VARS is CREDENTIAL_VARS
     pinned = Path(__file__).resolve().parent.parent / "contract" / "rules.json"
     rules = json.loads(pinned.read_text(encoding="utf-8"))
     assert rules["credential_variables"]
@@ -347,9 +347,10 @@ def test_managed_settings_name_the_guard_and_lock_what_must_stay_locked() -> Non
         assert rule in deny, rule
     # The guard's own groups; bee's .claudeignore group beside them is tests/bee/test_image.py's.
     hooks = [
-        h for h in settings["hooks"]["PreToolUse"]
+        h
+        for h in settings["hooks"]["PreToolUse"]
         if any(c["command"].endswith("/hooks/guard.py") for c in h["hooks"])
-    ]  # fmt: skip
+    ]
     matchers = {h["matcher"] for h in hooks}
     assert matchers == {"Bash", "Edit|Write|NotebookEdit"}
     for h in hooks:
