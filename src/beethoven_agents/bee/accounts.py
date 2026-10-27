@@ -43,6 +43,15 @@ from beartype import beartype
 from icontract import ensure, require
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# CREDENTIAL_VARS: every variable that outranks a sign-in directory in Claude Code's authentication
+# order, or routes the session to a provider that bills (code.claude.com/docs, authentication and
+# env-vars pages, read 2026-10-04). A child process never inherits one: the directory decides, and
+# only a subscription is ever used. It is the guard's list, taken rather than typed twice: the image
+# runs guard.py alone, before the package is bound, so the guard is the one that holds it.
+# hpcworker's list is canonical (credential_variables in the pinned contract/rules.json); every name
+# of it is in this one (tests/bee/test_accounts.py).
+from beethoven_agents.guard import CREDENTIAL_VARS
+
 __all__ = [
     "CREDENTIAL_VARS",
     "DEFAULT_COOLDOWN_S",
@@ -81,29 +90,6 @@ DEFAULT_HYSTERESIS_PCT = 5
 # five-hour window from the hit. A weekly limit reads its own reset from the status line.
 FALLBACK_REST_S = 5 * 3600
 
-# Every variable that outranks a sign-in directory in Claude Code's authentication order, or routes
-# the session to a provider that bills (code.claude.com/docs, authentication and env-vars pages,
-# read 2026-10-04). A child process never inherits one: the directory decides, and only a
-# subscription is ever used. hpcworker's list is canonical (credential_variables in the pinned
-# contract/rules.json); every name of it is here (tests/bee/test_accounts.py); the rest are this
-# file's own.
-CREDENTIAL_VARS: tuple[str, ...] = (
-    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE",
-    "ANTHROPIC_ORGANIZATION_ID", "ANTHROPIC_FEDERATION_RULE_ID", "ANTHROPIC_WORKSPACE_ID",
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_AWS_API_KEY", "ANTHROPIC_AWS_BASE_URL", "ANTHROPIC_AWS_WORKSPACE_ID",
-    "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_BEDROCK_MANTLE_BASE_URL",
-    "ANTHROPIC_BEDROCK_REGION_PREFIX", "ANTHROPIC_BEDROCK_SERVICE_TIER",
-    "ANTHROPIC_VERTEX_BASE_URL", "ANTHROPIC_VERTEX_PROJECT_ID",
-    "ANTHROPIC_FOUNDRY_API_KEY", "ANTHROPIC_FOUNDRY_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_BASE_URL",
-    "ANTHROPIC_FOUNDRY_RESOURCE",
-    "AWS_BEARER_TOKEN_BEDROCK", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
-    "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_USE_ANTHROPIC_AWS",
-    "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD", "CLAUDE_CODE_USE_MANTLE", "CLAUDE_CODE_USE_GATEWAY",
-    "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "CLAUDE_CODE_OAUTH_SCOPES",
-    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
-)  # fmt: skip
 # Set fresh for the child from the chosen account, never inherited from the parent's shell.
 _ACCOUNT_VARS: tuple[str, ...] = ("CLAUDE_CONFIG_DIR", "BEE_ACCOUNT")
 

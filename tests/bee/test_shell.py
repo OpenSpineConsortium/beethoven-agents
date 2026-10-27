@@ -27,7 +27,14 @@ HOOK_SH = BEE / "hook.sh"
 GRID_SH = BEE / "bee-grid.sh"
 PYTHON = REPO / ".pixi" / "envs" / "default" / "bin" / "python"
 
-needs_env = pytest.mark.skipif(not PYTHON.exists(), reason="no pixi environment in this checkout")
+
+@pytest.fixture
+def engine_python() -> Path:
+    # bee.sh and hook.sh run the engine's own interpreter, the pixi environment's; every lane runs
+    # the tests inside that environment (`pixi run --locked test`), so its absence is a failure
+    # that says how to run them, never a test that quietly does not run.
+    assert PYTHON.exists(), f"{PYTHON} is missing: run the tests with `pixi run --locked test`"
+    return PYTHON
 
 
 @pytest.mark.parametrize("script", [BEE_SH, HOOK_SH, GRID_SH])
@@ -39,7 +46,7 @@ def _shell_env(home: Path) -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k != "BEE_ENGINE"}
 
 
-@needs_env
+@pytest.mark.usefixtures("engine_python")
 def test_bee_use_switches_the_shell(home: Path) -> None:
     from beethoven_agents.bee import cli
 
@@ -69,9 +76,10 @@ def test_bee_use_switches_the_shell(home: Path) -> None:
     ]
 
 
-@needs_env
-@pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
+@pytest.mark.usefixtures("engine_python")
 def test_bee_sh_finds_the_engine_under_zsh(home: Path) -> None:
+    # zsh comes with the pixi environment on Linux and macOS (pixi.toml), so it is always found.
+    assert shutil.which("zsh"), "zsh is missing: run the tests with `pixi run --locked test`"
     out = subprocess.run(
         ["zsh", "-c", f". '{BEE_SH}'; print -r -- $BEE_ENGINE"],
         capture_output=True,
@@ -82,10 +90,15 @@ def test_bee_sh_finds_the_engine_under_zsh(home: Path) -> None:
     assert out.stdout.strip() == str(REPO)
 
 
-@needs_env
+@pytest.mark.usefixtures("engine_python")
 def test_hook_sh_runs_the_hooks(home: Path, project: Path) -> None:
-    payload = {"hook_event_name": "SessionStart", "source": "resume", "session_id": "s1",
-               "cwd": str(project), "transcript_path": "/x/s1.jsonl"}  # fmt: skip
+    payload = {
+        "hook_event_name": "SessionStart",
+        "source": "resume",
+        "session_id": "s1",
+        "cwd": str(project),
+        "transcript_path": "/x/s1.jsonl",
+    }
     env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project)}
     out = subprocess.run(
         ["bash", str(HOOK_SH), "session-start"],
@@ -98,8 +111,11 @@ def test_hook_sh_runs_the_hooks(home: Path, project: Path) -> None:
     context = json.loads(out.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "main" in context  # the branch, from git
     (project / ".claudeignore").write_text("*.log\n")
-    ask = {"tool_name": "Read", "cwd": str(project),
-           "tool_input": {"file_path": str(project / "x.log")}}  # fmt: skip
+    ask = {
+        "tool_name": "Read",
+        "cwd": str(project),
+        "tool_input": {"file_path": str(project / "x.log")},
+    }
     out = subprocess.run(
         ["bash", str(HOOK_SH), "claudeignore"],
         input=json.dumps(ask),
@@ -268,11 +284,18 @@ def test_grid_continue_binds_one_sign_in_per_container(grid: Grid, project: Path
     assert not any(x.endswith(":/engine:ro") for x in binds(session))
     assert f"{project}:{work(project)}" in binds(session)
     assert session[session.index("--pwd") + 1] == work(project)
-    assert {"BEETHOVEN_HANDOFF_GATE=1", "BEETHOVEN_HANDOFF=1", "CLAUDE_CONFIG_DIR=/claude",
-            "BEE_ACCOUNT=b"} <= set(envs(session))  # fmt: skip
+    assert {
+        "BEETHOVEN_HANDOFF_GATE=1",
+        "BEETHOVEN_HANDOFF=1",
+        "CLAUDE_CONFIG_DIR=/claude",
+        "BEE_ACCOUNT=b",
+    } <= set(envs(session))
     assert grid.after_image(session) == [
-        "claude", "Read .claude/state/HYDRATE.md and follow it.", "--model", "x"
-    ]  # fmt: skip
+        "claude",
+        "Read .claude/state/HYDRATE.md and follow it.",
+        "--model",
+        "x",
+    ]
     assert not Path(scratch(session)).exists()  # node-local temp is gone with the script
 
 
@@ -302,8 +325,12 @@ def test_grid_fork_binds_the_transcript_read_only(grid: Grid, project: Path) -> 
     assert [x for x in binds(session) if x.endswith(":/claude")] == [f"{b}:/claude"]
     assert "BEETHOVEN_HANDOFF=1" not in envs(session)
     assert grid.after_image(session) == [
-        "claude", "--resume", "/handoff/s1.jsonl", "--fork-session", prompt
-    ]  # fmt: skip
+        "claude",
+        "--resume",
+        "/handoff/s1.jsonl",
+        "--fork-session",
+        prompt,
+    ]
 
 
 def test_grid_fork_without_the_transcript_stops(grid: Grid, project: Path) -> None:
@@ -340,8 +367,15 @@ def test_grid_fork_binds_nothing_but_a_session_file_of_its_account(
 def test_grid_run_dir_moves_the_state(grid: Grid, project: Path) -> None:
     b = grid.account("b")
     run_dir = grid.tmp / "run"
-    out = grid.run("run", "b", "--project", str(project), "--run-dir", str(run_dir),
-                   FAKE_PLAN=f"b\t{b}\trun\t\t")  # fmt: skip
+    out = grid.run(
+        "run",
+        "b",
+        "--project",
+        str(project),
+        "--run-dir",
+        str(run_dir),
+        FAKE_PLAN=f"b\t{b}\trun\t\t",
+    )
     assert out.returncode == 0, out.stderr
     planned, _, session = grid.calls()
     planned_args = ["plan", "run", "b", "--project", work(project), "--strategy", "order"]
@@ -353,16 +387,18 @@ def test_grid_run_dir_moves_the_state(grid: Grid, project: Path) -> None:
 
 def test_grid_named_account_not_signed_in_stops(grid: Grid, project: Path) -> None:
     b = grid.account("b")
-    out = grid.run("run", "b", "--project", str(project), FAKE_PLAN=f"b\t{b}\trun\t\t",
-                   FAKE_STATUS_RC="1")  # fmt: skip
+    out = grid.run(
+        "run", "b", "--project", str(project), FAKE_PLAN=f"b\t{b}\trun\t\t", FAKE_STATUS_RC="1"
+    )
     assert out.returncode == 1 and "login b" in out.stderr
     assert len(grid.calls()) == 2
 
 
 def test_grid_unnamed_account_not_signed_in_leaves_the_rotation(grid: Grid, project: Path) -> None:
     b = grid.account("b")
-    out = grid.run("continue", "--project", str(project), FAKE_PLAN=f"b\t{b}\tfile\t\tx",
-                   FAKE_STATUS_RC="1")  # fmt: skip
+    out = grid.run(
+        "continue", "--project", str(project), FAKE_PLAN=f"b\t{b}\tfile\t\tx", FAKE_STATUS_RC="1"
+    )
     assert out.returncode == 1 and "ten tries" in out.stderr
     disabled = [c for c in grid.calls() if grid.after_image(c)[-3:] == ["account", "disable", "b"]]
     assert disabled and not any(grid.after_image(c)[:1] == ["claude"] for c in grid.calls())
@@ -375,8 +411,13 @@ def test_grid_add_makes_a_private_directory_and_signs_in_in_the_image(grid: Grid
     assert path.is_dir() and oct(path.stat().st_mode & 0o777) == "0o700"
     added = [c for c in grid.calls() if "add" in grid.after_image(c)]
     assert grid.after_image(added[0])[-6:] == [
-        "add", "second", "--path", str(path), "--no-login", "--no-create"
-    ]  # fmt: skip
+        "add",
+        "second",
+        "--path",
+        str(path),
+        "--no-login",
+        "--no-create",
+    ]
     login = grid.calls()[-1]
     assert grid.after_image(login)[-4:] == ["login", "second", "--bound", "/claude"]
     assert [x for x in binds(login) if x.endswith(":/claude")] == [f"{path}:/claude"]
@@ -421,8 +462,12 @@ def test_grid_handoff_import_maps_the_file_into_the_project(grid: Grid, project:
     call = grid.calls()[-1]
     assert f"{project}:{work(project)}" in binds(call)
     assert grid.after_image(call)[-5:] == [
-        "handoff", "import", f"{work(project)}/notes/ctx.md", "--project", work(project)
-    ]  # fmt: skip
+        "handoff",
+        "import",
+        f"{work(project)}/notes/ctx.md",
+        "--project",
+        work(project),
+    ]
     outside = grid.tmp / "elsewhere.md"
     outside.write_text("x\n")
     out = grid.run("handoff", "import", str(outside), "--project", str(project))
@@ -473,8 +518,9 @@ def test_grid_reads_the_accounts_own_profile(grid: Grid, home: Path) -> None:
     lab.mkdir()
     (lab / "claude-verify.sif").write_text("not an image\n")
     (home / ".hpcworker").mkdir()
-    (home / ".hpcworker" / "profile.json").write_text(site_profile(grid, containers_dir=str(lab))
-                                                      .read_text())  # fmt: skip
+    (home / ".hpcworker" / "profile.json").write_text(
+        site_profile(grid, containers_dir=str(lab)).read_text()
+    )
     image = str(lab / "claude-verify.sif")
     out = grid.run("site", BEE_SITE="", BEE_IMAGE="")
     assert rows(out)["profile"] == str(home / ".hpcworker" / "profile.json")

@@ -139,8 +139,11 @@ def test_no_file_means_no_opinion(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 def test_main_denies_with_json_and_fails_open(repo: Path) -> None:
     out, err = io.StringIO(), io.StringIO()
-    payload = {"tool_name": "Read", "cwd": str(repo),
-               "tool_input": {"file_path": str(repo / "x.log")}}  # fmt: skip
+    payload = {
+        "tool_name": "Read",
+        "cwd": str(repo),
+        "tool_input": {"file_path": str(repo / "x.log")},
+    }
     assert ci.main(io.StringIO(json.dumps(payload)), out, err) == 0
     decision = json.loads(out.getvalue())["hookSpecificOutput"]
     assert (

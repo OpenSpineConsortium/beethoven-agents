@@ -18,6 +18,11 @@ __pycache__/
 .env.*
 *.pem
 
+# The evidence report's default directory (`pixi run --locked report`, beethoven-qa's
+# docs/REPORT.md): it is handed over, never committed, and an untracked folder would make the
+# pre-push hook refuse the next push.
+report/
+
 # Worktrees Claude Code creates for parallel sessions and isolated subagents (docs/PARALLEL.md).
 .claude/worktrees/
 

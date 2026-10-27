@@ -51,8 +51,13 @@ def project(tmp_path: Path) -> Path:
     """A git repository with one commit."""
     p = tmp_path / "proj"
     p.mkdir()
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.org"}  # fmt: skip
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.org",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.org",
+    }
     subprocess.run(["git", "init", "-q", "-b", "main", str(p)], check=True, env=env)
     (p / "a.py").write_text("x = 1\n")
     subprocess.run(["git", "-C", str(p), "add", "a.py"], check=True, env=env)
@@ -61,11 +66,17 @@ def project(tmp_path: Path) -> Path:
 
 
 def commit(p: Path, name: str, text: str) -> str:
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.org",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.org"}  # fmt: skip
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.org",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.org",
+    }
     (p / name).write_text(text)
     subprocess.run(["git", "-C", str(p), "add", name], check=True, env=env)
     subprocess.run(["git", "-C", str(p), "commit", "-q", "-m", f"add {name}"], check=True, env=env)
-    out = subprocess.run(["git", "-C", str(p), "rev-parse", "HEAD"], capture_output=True,
-                         text=True, check=True)  # fmt: skip
+    out = subprocess.run(
+        ["git", "-C", str(p), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    )
     return out.stdout.strip()

@@ -838,6 +838,17 @@ def _next_step(project: str, env: dict[str, str]) -> str:
     return f"{write}, then exit and run {_continue_command(env)}"
 
 
+# On a resume or a fork Claude Code reports what re-entering costs (hooks reference,
+# SessionStart); the session record keeps each one it sends, for the methods paper's quota record
+# and probe M13.
+_REENTRY_COSTS: tuple[str, ...] = (
+    "context_tokens",
+    "estimated_cache_write_usd",
+    "prompt_cache_likely_expired",
+    "seconds_since_last_response",
+)
+
+
 def _session_start(payload: dict[str, object], env: dict[str, str]) -> str:
     project = _project(payload, env)
     sdir = state_dir(project, env)
@@ -855,10 +866,7 @@ def _session_start(payload: dict[str, object], env: dict[str, str]) -> str:
         "head_at_start": snap.head,
         "previous_session": previous.get("session_id"),
     }
-    # On a resume or a fork Claude Code reports what re-entering costs (hooks reference,
-    # SessionStart); kept for the methods paper's quota record and probe M13.
-    for key in ("context_tokens", "estimated_cache_write_usd", "prompt_cache_likely_expired",
-                "seconds_since_last_response"):  # fmt: skip
+    for key in _REENTRY_COSTS:
         if key in payload:
             record[key] = payload[key]
     _write(os.path.join(sdir, SESSION_FILE), json.dumps(record, indent=2) + "\n", private=True)
@@ -1160,7 +1168,7 @@ def main(argv: list[str], stdin: _TextStream, stdout: _TextStream) -> int:
         out = hook(payload, env)
         if out:
             stdout.write(out + "\n")
-    except Exception as exc:  # noqa: BLE001 - upkeep is best effort; the session goes on
+    except Exception as exc:  # upkeep is best effort; the session goes on
         _log_error(_project(payload, env), env, name, exc)
     return 0
 
@@ -1173,7 +1181,7 @@ def _log_error(project: str, env: dict[str, str], name: str, exc: Exception) -> 
             os.path.join(sdir, ERROR_LOG),
             f"{_utc()} {name or '-'}: {exc.__class__.__name__}: {_clip(str(exc), 300)}",
         )
-    except Exception:  # noqa: BLE001, S110 - nowhere left to write; stay silent and let it run
+    except Exception:  # nowhere left to write; stay silent and let it run
         pass
 
 

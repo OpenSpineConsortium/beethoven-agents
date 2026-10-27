@@ -152,9 +152,16 @@ def _ensure_not_login_node() -> None:
 # and the VS Code edition's worker among them. bee-grid.sh checks the same names on the host, where
 # --cleanenv cannot hide them.
 AGENT_MARKERS: tuple[str, ...] = (
-    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "BEETHOVEN_REQUEST_ID", "BEETHOVEN_WORKER",
-    "ASHLEY_REQUEST_ID", "ASHLEY_WORKER", "ASHLEY_JOB", "HPCW_AGENT", "AI_AGENT",
-)  # fmt: skip
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "BEETHOVEN_REQUEST_ID",
+    "BEETHOVEN_WORKER",
+    "ASHLEY_REQUEST_ID",
+    "ASHLEY_WORKER",
+    "ASHLEY_JOB",
+    "HPCW_AGENT",
+    "AI_AGENT",
+)
 
 
 def _ensure_not_nested() -> None:
@@ -822,8 +829,10 @@ def _cmd_where(args: argparse.Namespace) -> int:
 
 def _cmd_log(args: argparse.Namespace) -> int:
     sdir = handoff.state_dir(_project(args.project))
-    for path in (os.path.join(sdir, handoff.LOG_FILE), os.path.join(acc.registry_dir(),
-                                                                    "switches.log")):  # fmt: skip
+    for path in (
+        os.path.join(sdir, handoff.LOG_FILE),
+        os.path.join(acc.registry_dir(), "switches.log"),
+    ):
         try:
             with open(path, encoding="utf-8") as fh:
                 lines = fh.read().splitlines()

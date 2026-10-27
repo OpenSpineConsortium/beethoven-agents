@@ -56,8 +56,9 @@ def test_wayne_state_resolves_to_what_bee_used_before() -> None:
     prof = site.SiteProfile.model_validate(load(PROFILES / "wayne.json"))
     assert prof.image_store is not None
     folder = site.container_dir(prof.containers_dir, prof.image_store.path)
-    assert site.engine_image(folder) == ("/rs/rs_grp_oschome/shared/beethoven/containers/"
-                                         "claude-verify.sif")  # fmt: skip
+    assert site.engine_image(folder) == (
+        "/rs/rs_grp_oschome/shared/beethoven/containers/claude-verify.sif"
+    )
     assert prof.runtime_module == "apptainer/1.2.2"
     assert site.runtime_command(prof.runtime) == "apptainer"
     local = prof.tmpdir_is_node_local
@@ -99,8 +100,9 @@ def test_node_temp_base_order_after_the_pattern() -> None:
 
 
 def test_runtimes() -> None:
-    assert [site.runtime_command(r) for r in ("", "apptainer", "singularity", "podman", "pyxis")] \
-        == ["apptainer", "apptainer", "singularity", "", ""]  # fmt: skip
+    assert [
+        site.runtime_command(r) for r in ("", "apptainer", "singularity", "podman", "pyxis")
+    ] == ["apptainer", "apptainer", "singularity", "", ""]
 
 
 # --- Python and bash agree -----------------------------------------------------------------------
@@ -158,7 +160,7 @@ def reference(profile: Any, env: dict[str, str]) -> dict[str, str] | None:
             job,
             *vals,
             writable,
-        ),  # fmt: skip
+        ),
     }
 
 
@@ -226,7 +228,7 @@ ENVS: dict[str, dict[str, str]] = {
         "TMPDIR": "/cephfs/t",
         "L_SCRATCH": "/ls",
         "LOCAL_SCRATCH": "/ssd",
-    },  # fmt: skip
+    },
 }
 
 
@@ -235,8 +237,13 @@ ENVS: dict[str, dict[str, str]] = {
 @pytest.mark.parametrize("env_name", sorted(ENVS))
 def test_bash_and_python_agree(path: Path, variant: str, env_name: str, tmp_path: Path) -> None:
     profile = VARIANTS[variant](load(path))
-    env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path / "home"), "USER": "student",
-           "SLURM_JOB_ID": "4242", **ENVS[env_name]}  # fmt: skip
+    env = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(tmp_path / "home"),
+        "USER": "student",
+        "SLURM_JOB_ID": "4242",
+        **ENVS[env_name],
+    }
     assert shell_resolve(profile, env, tmp_path) == reference(profile, env)
 
 
@@ -300,9 +307,11 @@ def code_files() -> list[Path]:
     skip = {".md", ".json", ".pyc"}
     pulls = sorted(REPO.glob("*/pull.sh"))
     return sorted(
-        p for r in (REPO / "src", REPO / "containers") for p in r.rglob("*")
+        p
+        for r in (REPO / "src", REPO / "containers")
+        for p in r.rglob("*")
         if p.is_file() and p.suffix not in skip and "__pycache__" not in p.parts
-    ) + [REPO / "containers" / "managed-settings.json", *pulls]  # fmt: skip
+    ) + [REPO / "containers" / "managed-settings.json", *pulls]
 
 
 def offences(lines: list[str]) -> list[str]:
@@ -368,8 +377,9 @@ def _fake_runtime(tmp: Path, name: str = "apptainer") -> tuple[Path, Path]:
 
 def _build(tmp: Path, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
     base = {"PATH": os.environ["PATH"], "HOME": str(tmp / "home"), "USER": "student"}
-    return subprocess.run(["bash", str(BUILD_SH), *args], capture_output=True, text=True,
-                          env={**base, **env}, cwd=tmp)  # fmt: skip
+    return subprocess.run(
+        ["bash", str(BUILD_SH), *args], capture_output=True, text=True, env={**base, **env}, cwd=tmp
+    )
 
 
 def test_build_puts_its_temp_where_the_site_says(tmp_path: Path) -> None:
@@ -378,8 +388,15 @@ def test_build_puts_its_temp_where_the_site_says(tmp_path: Path) -> None:
     data = load(PROFILES / "wayne.json")
     prof.write_text(json.dumps({**data, "runtime": "singularity", "node_tmp": "$SLURM_TMPDIR"}))
     node = tmp_path / "node"
-    out = _build(tmp_path, "--out", str(tmp_path / "out"), PATH=f"{bin_dir}:{os.environ['PATH']}",
-                 SLURM_JOB_ID="77", SLURM_TMPDIR=str(node), BEE_SITE_PROFILE=str(prof))  # fmt: skip
+    out = _build(
+        tmp_path,
+        "--out",
+        str(tmp_path / "out"),
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        SLURM_JOB_ID="77",
+        SLURM_TMPDIR=str(node),
+        BEE_SITE_PROFILE=str(prof),
+    )
     assert out.returncode == 0, out.stderr
     verb, tmpdir = log.read_text().splitlines()[0].split("|")
     assert verb == "build" and tmpdir.startswith(f"{node}/beethoven_build_77_")
@@ -393,16 +410,26 @@ def test_build_puts_its_temp_where_the_site_says(tmp_path: Path) -> None:
 
 def test_build_inside_slurm_needs_a_site_profile(tmp_path: Path) -> None:
     bin_dir, log = _fake_runtime(tmp_path)
-    out = _build(tmp_path, "--out", str(tmp_path / "out"), PATH=f"{bin_dir}:{os.environ['PATH']}",
-                 SLURM_JOB_ID="77")  # fmt: skip
+    out = _build(
+        tmp_path,
+        "--out",
+        str(tmp_path / "out"),
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        SLURM_JOB_ID="77",
+    )
     assert out.returncode == 1 and "no site profile" in out.stderr
     assert not log.exists()
 
 
 def test_build_on_a_ci_runner_needs_none(tmp_path: Path) -> None:
     bin_dir, log = _fake_runtime(tmp_path)
-    out = _build(tmp_path, "--out", str(tmp_path / "out"), "--allow-outside-slurm",
-                 PATH=f"{bin_dir}:{os.environ['PATH']}")  # fmt: skip
+    out = _build(
+        tmp_path,
+        "--out",
+        str(tmp_path / "out"),
+        "--allow-outside-slurm",
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+    )
     assert out.returncode == 0, out.stderr
     tmpdir = log.read_text().splitlines()[0].split("|")[1]
     assert tmpdir.startswith("/tmp/student/beethoven_build_local")

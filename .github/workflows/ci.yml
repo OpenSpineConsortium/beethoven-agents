@@ -8,11 +8,21 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The backstop: once a day the gate proves every module with no base (beethoven-qa 9.0.0), since
+  # a push or a pull request proves only what its change reaches and CrossHair's search is bounded
+  # and timed, so not quite the same twice.
+  schedule:
+    - cron: "17 5 * * *"
 
 env:
   # The pixi that produced the committed lock. Fetched from its release asset by name, not from an
   # install script, so the run makes one fetch it can account for.
   PIXI_VERSION: 0.81.0
+  # The sha256 of that asset (pixi-x86_64-unknown-linux-musl of v0.81.0), beethoven-qa's own
+  # measurement of 2026-10-08 (its ci.yml and the kit's standards.yml carry the same digest); pixi's
+  # release publishes no checksum asset to compare with. A new pixi version means a new digest,
+  # measured again.
+  PIXI_SHA256: 248510f5f75460a2ae4ec62d761e15c0191dc35db3b1da6f82d9f17c6017051d
 
 # No job writes anything; the token each job holds can only read.
 permissions:
@@ -25,15 +35,27 @@ jobs:
     # names are the required checks in .github/rulesets/main.json; rename both together.
     name: gate (lock → lint, typecheck, tests, CrossHair/Z3, vendor-check)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The full proof, every module with no base, is what the schedule runs; beethoven-qa's own
+    # took 26 of its job's 28 min 45 s on a runner over 56 targets (2026-10-09) and it raised its
+    # limit to 60 for that reason.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # The proof's base, read from this workflow's own runs (below; beethoven-qa 9.0.0).
+      actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          # The proof compares the change with a commit of main, which needs the history.
+          fetch-depth: 0
           persist-credentials: false
       - name: install pixi
+        # Checked against its digest before it is made executable or run; a file that is not the
+        # one measured is removed and the job fails.
         run: |
           curl -fsSL -o /usr/local/bin/pixi \
             "https://github.com/prefix-dev/pixi/releases/download/v${PIXI_VERSION}/pixi-x86_64-unknown-linux-musl"
+          echo "${PIXI_SHA256}  /usr/local/bin/pixi" | sha256sum -c - || { rm -f /usr/local/bin/pixi; exit 1; }
           chmod 0755 /usr/local/bin/pixi
           pixi --version
       - name: reconstruct the environment from the lock
@@ -49,13 +71,35 @@ jobs:
         run: pixi run --locked typecheck
       - name: tests (typeguard enclave)
         run: pixi run --locked test
+      - name: the commit the proof starts from
+        id: base
+        # On a pull request and a push to main, the newest commit of main whose run of this
+        # workflow passed on a push: the proof then covers only the modules the change since it
+        # reaches (vendor/beethoven-qa/src/beethoven_qa/scope.py says what reaches what). The
+        # schedule and a run by hand prove every module. No such commit, or one the clone lacks,
+        # is none too.
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          base=none
+          sha=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' 2>/dev/null) || sha=
+          if [ -n "$sha" ] && git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+            base=$sha
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "the proof starts from: $base"
       - name: symbolic verification (CrossHair + Z3)
+        env:
+          BEETHOVEN_QA_BASE: ${{ steps.base.outputs.base || 'none' }}
         run: pixi run --locked symbolic
       - name: shell syntax of the build script, bee's scripts and the kit
         # One file per bash -n: with several operands bash parses the first and hands the rest to
         # it as arguments, so a syntax error in any later file went unseen.
         run: |
-          for f in containers/build.sh .githooks/pre-push .claude/hooks/session-start.sh \
+          for f in containers/build.sh .githooks/pre-push .claude/hooks/beethoven-qa-session-start.sh \
             src/beethoven_agents/bee/bee-grid.sh src/beethoven_agents/bee/hook.sh \
             src/beethoven_agents/bee/shell/bee.sh src/beethoven_agents/site.sh profiles/pull.sh; do
             bash -n "$f" || exit 1
@@ -66,6 +110,9 @@ jobs:
     # exist; it is not the published image, which is built on a compute node by build.sh and whose
     # digest is committed beside it. Runners are root, so no --fakeroot here.
     name: image (apptainer build)
+    # The schedule is the gate's full proof alone; the image is built for every change, on a pull
+    # request and on main, and a day with no change builds nothing new.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
